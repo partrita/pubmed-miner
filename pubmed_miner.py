@@ -31,27 +31,38 @@ def make_table(json_list):
     try:
         df = pd.json_normalize(json_list, record_path=["annotations"], meta=["pmid"])
         refine_df = df[["mention", "obj", "prob", "pmid"]]
+        # use pd.astype() function for save memory
+        refine_df = refine_df.astype(
+            {
+                "prob": "float16",
+                "pmid": "int32",
+            }
+        )
         return refine_df
     except:
         return []
 
 
-if __name__ == "__main__":
-    entrez_query = input("What do want to search in PubMed? ")
-    pmids = get_pmid(entrez_query, "100")  # string should be used for numberv
-    result_df = pd.DataFrame()
-    print(f"PubMed search for {entrez_query} is Done!")
-    for i in tqdm(pmids, unit=" pmid"):
+def get_bern2(pmids):
+    temp_df = pd.DataFrame()
+    for i in tqdm(pmids, unit="pmid"):
         # print(query_pmid(i))
         new_df = make_table(query_pmid([i]))  # only list works!
-        time.sleep(1)
+        time.sleep(1)  # delay for BERN2 API
         try:
-            # print(result_df)
-            # print(new_df)
-            result_df = pd.concat([result_df, new_df], ignore_index=True)
+            temp_df = pd.concat([temp_df, new_df], ignore_index=True)
         except:
             pass
+    return temp_df
 
-    print("Concet the dataframe is Done")
-    result_df.to_csv(f"{entrez_query}.csv")
-    print("Results saved")
+
+if __name__ == "__main__":
+    entrez_query = input("What do want to search in PubMed? ")
+    pmids = get_pmid(entrez_query, "10000")  # string should be used for number
+    num_pmids = len(pmids)
+    print(f"Number of search results is: {num_pmids}!")
+    temp_df = get_bern2(pmids)
+    print(f"Shape of result table is: {temp_df.shape}.")
+    temp_df.to_csv(f"./output/{entrez_query}.csv")
+    print(f"{entrez_query}.csv fsile saved in output directory.")
+    print(f"Everything is completed! It is time for analysis.")
