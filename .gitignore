@@ -128,5 +128,16 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-.pdm.toml
+# UV specific
+*.uvsock
+
+# IDE specific
+.idea/
+.vscode/
+
+# Output directory
+output/
+
+# Python C extensions (Windows)
+*.pyd
 
