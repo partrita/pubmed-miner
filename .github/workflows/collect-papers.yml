@@ -1,0 +1,159 @@
+name: Essential Papers Collection
+
+# This workflow automatically collects and updates essential papers
+# Requirements addressed:
+# - 4.1: Daily automated execution 
+# - 4.2: Proper scheduling and environment setup
+# - 4.3: GitHub Issues integration
+
+on:
+  # Run daily at 6:00 AM UTC (adjust timezone as needed)
+  schedule:
+    - cron: '0 6 * * *'
+  
+  # Allow manual triggering for testing
+  workflow_dispatch:
+    inputs:
+      log_level:
+        description: 'Log level for execution'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+
+  # Run on pushes to main branch (for testing)
+  push:
+    branches: [ main ]
+    paths:
+      - 'config/**'
+      - 'src/**'
+      - 'automated_collection.py'
+      - '.github/workflows/collect-papers.yml'
+
+jobs:
+  collect-papers:
+    runs-on: ubuntu-latest
+    
+    # Set timeout to prevent hanging workflows
+    timeout-minutes: 60
+    
+    permissions:
+      # Required for creating/updating issues
+      issues: write
+      contents: read
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        # Fetch full history for change tracking
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        
+        # Install additional dependencies for automation
+        pip install PyYAML requests python-dateutil
+        
+        # Install BioPython for PubMed access
+        pip install biopython
+        
+        # Install GitHub API library
+        pip install PyGithub
+    
+    - name: Validate configuration
+      run: |
+        python -c "
+        from src.pubmed_miner.utils.config_manager import ConfigurationManager
+        config_manager = ConfigurationManager()
+        config_manager.validate_config()
+        print('Configuration validation successful')
+        "
+    
+    - name: Create logs directory
+      run: mkdir -p logs
+    
+    - name: Run automated collection
+      env:
+        # GitHub token for API access (required)
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+        # PubMed email (required by NCBI)
+        PUBMED_EMAIL: ${{ secrets.PUBMED_EMAIL || 'pubmed.miner@example.com' }}
+        
+        # Optional: Custom log level
+        LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+        
+        # GitHub repository context
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        
+      run: |
+        echo "Starting automated essential papers collection..."
+        echo "Repository: $GITHUB_REPOSITORY"
+        echo "Triggered by: $GITHUB_ACTOR"
+        echo "Run ID: $GITHUB_RUN_ID"
+        echo "Log level: $LOG_LEVEL"
+        
+        python automated_collection.py
+    
+    - name: Upload logs
+      uses: actions/upload-artifact@v3
+      if: always()  # Upload logs even if the workflow fails
+      with:
+        name: collection-logs-${{ github.run_id }}
+        path: logs/
+        retention-days: 30
+    
+    - name: Report results
+      if: always()
+      run: |
+        echo "=== Workflow Summary ==="
+        
+        if [ -f "logs/automated_collection.log" ]; then
+          echo "Log file contents:"
+          tail -n 50 logs/automated_collection.log
+        else
+          echo "No log file found"
+        fi
+        
+        echo "=== End Summary ==="
+
+  # Optional: Notify on failure (uncomment and configure as needed)
+  # notify-failure:
+  #   runs-on: ubuntu-latest
+  #   needs: collect-papers
+  #   if: failure()
+  #   
+  #   steps:
+  #   - name: Notify failure
+  #     uses: actions/github-script@v6
+  #     with:
+  #       script: |
+  #         github.rest.issues.create({
+  #           owner: context.repo.owner,
+  #           repo: context.repo.repo,
+  #           title: 'Essential Papers Collection Failed',
+  #           body: `The automated essential papers collection workflow failed.
+  #           
+  #           **Run Details:**
+  #           - Run ID: ${{ github.run_id }}
+  #           - Triggered by: ${{ github.actor }}
+  #           - Time: ${{ github.event.head_commit.timestamp }}
+  #           
+  #           Please check the workflow logs for details.`,
+  #           labels: ['automation', 'error', 'essential-papers']
+  #         })
