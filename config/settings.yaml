@@ -1,0 +1,78 @@
+# Essential Papers Recommender - System Settings
+#
+# This file contains system-wide configuration settings.
+
+# GitHub Integration Settings
+github:
+  # Repository where issues will be created (format: owner/repo)
+  repository: "partrita/pubmed-miner"  # CHANGE THIS to your repository
+  
+  # GitHub token for API access
+  # For local testing without token, use: mock_token_for_local_testing
+  token: "mock_token_for_local_testing"  # CHANGE THIS to your GitHub token for production
+  
+  # Labels to apply to created issues
+  issue_labels:
+    - "essential-papers"
+    - "automated"
+    - "research"
+
+# Paper Scoring Algorithm Weights
+# These weights determine how papers are ranked (must sum to 1.0)
+scoring_weights:
+  citation_weight: 0.4      # Weight for citation count (40%)
+  impact_factor_weight: 0.3 # Weight for journal impact factor (30%)
+  recency_weight: 0.2       # Weight for publication recency (20%)
+  relevance_weight: 0.1     # Weight for query relevance (10%)
+
+# Cache Settings (in days)
+cache_settings:
+  citation_cache_days: 7        # How long to cache citation counts
+  impact_factor_cache_days: 365 # How long to cache impact factors
+  paper_metadata_cache_days: 30 # How long to cache paper metadata
+
+# PubMed API Settings
+pubmed:
+  # Email address for PubMed API (required by NCBI)
+  email: "partrita@gmail.com"  # CHANGE THIS to your email address
+  
+# API Rate Limiting Settings
+api_settings:
+  pubmed_rate_limit: 3      # Requests per second to PubMed
+  github_rate_limit: 5000   # Requests per hour to GitHub API
+  retry_attempts: 3         # Number of retry attempts for failed requests
+  retry_delay: 1.0          # Delay between retries (seconds)
+
+# External API Configuration
+external_apis:
+  # Crossref API for citation data
+  crossref:
+    base_url: "https://api.crossref.org"
+    rate_limit: 50  # requests per second
+    
+  # Semantic Scholar API (fallback for citations)
+  semantic_scholar:
+    base_url: "https://api.semanticscholar.org"
+    rate_limit: 100  # requests per second
+    
+  # SCImago Journal Rank API for impact factors
+  scimago:
+    base_url: "https://www.scimagojr.com"
+    rate_limit: 10   # requests per second
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/pubmed_miner.log"
+
+# GitHub Actions Specific Settings
+github_actions:
+  # Whether to create issues or just log results
+  create_issues: true
+  
+  # Whether to update existing issues or create new ones
+  update_existing: true
+  
+  # Maximum number of papers to include in issue body
+  max_papers_in_issue: 25
