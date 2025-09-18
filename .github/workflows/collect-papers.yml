@@ -111,7 +111,7 @@ jobs:
         python automated_collection.py
     
     - name: Upload logs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()  # Upload logs even if the workflow fails
       with:
         name: collection-logs-${{ github.run_id }}
