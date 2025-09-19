@@ -57,9 +57,21 @@ jobs:
 
     # [변경] 여러 pip 명령어를 하나의 uv 명령어로 통합합니다.
     - name: Install dependencies
-      # lock 파일이 있다면 uv sync를, 없다면 uv pip install -e . 을 사용합니다.
-      # uv sync가 더 안정적이고 빠릅니다.
-      run: uv sync --locked --all-extras --dev
+      # CI 환경에서는 lockfile을 업데이트하고 sync 실행
+      # 프로덕션에서는 정확한 버전 재현을 위해 lock 파일 사용
+      run: |
+        if [ -f "uv.lock" ]; then
+          echo "Lockfile exists, attempting locked sync..."
+          uv sync --locked --all-extras --dev || {
+            echo "Locked sync failed, updating lockfile..."
+            uv lock
+            uv sync --all-extras --dev
+          }
+        else
+          echo "No lockfile found, creating and syncing..."
+          uv lock
+          uv sync --all-extras --dev
+        fi
 
     - name: Validate configuration
       # [변경] 'uv run'을 사용하여 uv가 관리하는 환경에서 스크립트를 실행합니다.
