@@ -1,17 +1,8 @@
 name: Essential Papers Collection
 
-# This workflow automatically collects and updates essential papers
-# Requirements addressed:
-# - 4.1: Daily automated execution 
-# - 4.2: Proper scheduling and environment setup
-# - 4.3: GitHub Issues integration
-
 on:
-  # Run daily at 6:00 AM UTC (adjust timezone as needed)
   schedule:
     - cron: '0 6 * * *'
-  
-  # Allow manual triggering for testing
   workflow_dispatch:
     inputs:
       log_level:
@@ -24,11 +15,11 @@ on:
           - INFO
           - WARNING
           - ERROR
-
-  # Run on pushes to main branch (for testing)
   push:
     branches: [ main ]
     paths:
+      - 'pyproject.toml' # 의존성 파일을 pyproject.toml로 변경
+      - 'uv.lock' # lock 파일도 변경 사항을 감지하도록 추가
       - 'config/**'
       - 'src/**'
       - 'automated_collection.py'
@@ -38,11 +29,10 @@ jobs:
   collect-papers:
     runs-on: ubuntu-latest
     
-    # Set timeout to prevent hanging workflows
-    timeout-minutes: 60
+    # [변경] 실행 시간 제한을 2시간(120분)으로 늘렸습니다. 필요에 따라 조절할 수 있습니다.
+    timeout-minutes: 120
     
     permissions:
-      # Required for creating/updating issues
       issues: write
       contents: read
     
@@ -50,35 +40,34 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        # Fetch full history for change tracking
         fetch-depth: 0
     
+    # [변경] GitHub 캐시를 활용하여 Python을 먼저 설치합니다.
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
-        cache: 'pip'
+        # pyproject.toml에 명시된 Python 버전을 사용하도록 설정
+        python-version-file: 'pyproject.toml'
     
+    # [변경] 공식 액션을 사용하여 uv를 설치하고 캐시를 활성화합니다.
+    - name: Install uv and Enable Cache
+      uses: astral-sh/setup-uv@v1
+      with:
+        # 내장 캐시 기능을 활성화하여 다음 실행 속도를 높입니다.
+        enable-cache: true
+
+    # [변경] 여러 pip 명령어를 하나의 uv 명령어로 통합합니다.
     - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .
-        
-        # Install additional dependencies for automation
-        pip install PyYAML requests python-dateutil
-        
-        # Install BioPython for PubMed access
-        pip install biopython
-        
-        # Install GitHub API library
-        pip install PyGithub
-    
+      # lock 파일이 있다면 uv sync를, 없다면 uv pip install -e . 을 사용합니다.
+      # uv sync가 더 안정적이고 빠릅니다.
+      run: uv sync --locked --all-extras --dev
+
     - name: Validate configuration
-      run: |
-        python -c "
-        from src.pubmed_miner.utils.config_manager import ConfigurationManager
-        config_manager = ConfigurationManager()
-        config_manager.validate_config()
+      # [변경] 'uv run'을 사용하여 uv가 관리하는 환경에서 스크립트를 실행합니다.
+      run: uv run python -c "
+        from src.pubmed_miner.utils.config_manager import ConfigurationManager;
+        config_manager = ConfigurationManager();
+        config_manager.validate_config();
         print('Configuration validation successful')
         "
     
@@ -87,32 +76,21 @@ jobs:
     
     - name: Run automated collection
       env:
-        # GitHub token for API access (required)
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-        # PubMed email (required by NCBI)
         PUBMED_EMAIL: ${{ secrets.PUBMED_EMAIL || 'pubmed.miner@example.com' }}
-        
-        # Optional: Custom log level
         LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
-        
-        # GitHub repository context
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_RUN_ID: ${{ github.run_id }}
         
+      # [변경] 'uv run'을 사용하여 스크립트를 실행합니다.
       run: |
         echo "Starting automated essential papers collection..."
-        echo "Repository: $GITHUB_REPOSITORY"
-        echo "Triggered by: $GITHUB_ACTOR"
-        echo "Run ID: $GITHUB_RUN_ID"
-        echo "Log level: $LOG_LEVEL"
-        
-        python automated_collection.py
+        uv run python automated_collection.py
     
     - name: Upload logs
       uses: actions/upload-artifact@v4
-      if: always()  # Upload logs even if the workflow fails
+      if: always()
       with:
         name: collection-logs-${{ github.run_id }}
         path: logs/
@@ -122,38 +100,10 @@ jobs:
       if: always()
       run: |
         echo "=== Workflow Summary ==="
-        
         if [ -f "logs/automated_collection.log" ]; then
           echo "Log file contents:"
           tail -n 50 logs/automated_collection.log
         else
           echo "No log file found"
         fi
-        
         echo "=== End Summary ==="
-
-  # Optional: Notify on failure (uncomment and configure as needed)
-  # notify-failure:
-  #   runs-on: ubuntu-latest
-  #   needs: collect-papers
-  #   if: failure()
-  #   
-  #   steps:
-  #   - name: Notify failure
-  #     uses: actions/github-script@v6
-  #     with:
-  #       script: |
-  #         github.rest.issues.create({
-  #           owner: context.repo.owner,
-  #           repo: context.repo.repo,
-  #           title: 'Essential Papers Collection Failed',
-  #           body: `The automated essential papers collection workflow failed.
-  #           
-  #           **Run Details:**
-  #           - Run ID: ${{ github.run_id }}
-  #           - Triggered by: ${{ github.actor }}
-  #           - Time: ${{ github.event.head_commit.timestamp }}
-  #           
-  #           Please check the workflow logs for details.`,
-  #           labels: ['automation', 'error', 'essential-papers']
-  #         })

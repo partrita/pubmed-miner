@@ -1,6 +1,7 @@
 """
 Configuration data models.
 """
+
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
 
@@ -8,6 +9,7 @@ from typing import List, Dict, Any
 @dataclass
 class TopicConfig:
     """Configuration for a research topic."""
+
     name: str
     query: str
     max_papers: int = 1000
@@ -31,9 +33,12 @@ class TopicConfig:
 @dataclass
 class GitHubConfig:
     """GitHub integration configuration."""
+
     token: str
     repository: str
-    issue_labels: List[str] = field(default_factory=lambda: ["essential-papers", "automated"])
+    issue_labels: List[str] = field(
+        default_factory=lambda: ["essential-papers", "automated"]
+    )
 
     def __post_init__(self):
         """Validate GitHub configuration."""
@@ -49,6 +54,7 @@ class GitHubConfig:
 @dataclass
 class ScoringWeights:
     """Weights for paper scoring algorithm."""
+
     citation_weight: float = 0.4
     impact_factor_weight: float = 0.3
     recency_weight: float = 0.2
@@ -56,13 +62,21 @@ class ScoringWeights:
 
     def __post_init__(self):
         """Validate scoring weights."""
-        total = (self.citation_weight + self.impact_factor_weight + 
-                self.recency_weight + self.relevance_weight)
+        total = (
+            self.citation_weight
+            + self.impact_factor_weight
+            + self.recency_weight
+            + self.relevance_weight
+        )
         if abs(total - 1.0) > 0.001:  # Allow small floating point errors
             raise ValueError(f"Weights must sum to 1.0, got {total}")
-        
-        weights = [self.citation_weight, self.impact_factor_weight, 
-                  self.recency_weight, self.relevance_weight]
+
+        weights = [
+            self.citation_weight,
+            self.impact_factor_weight,
+            self.recency_weight,
+            self.relevance_weight,
+        ]
         if any(w < 0 for w in weights):
             raise ValueError("All weights must be non-negative")
 
@@ -70,6 +84,7 @@ class ScoringWeights:
 @dataclass
 class SystemConfig:
     """Overall system configuration."""
+
     topics: List[TopicConfig]
     github: GitHubConfig
     scoring_weights: ScoringWeights
@@ -79,7 +94,7 @@ class SystemConfig:
         """Validate system configuration."""
         if not self.topics:
             raise ValueError("At least one topic must be configured")
-        
+
         # Check for duplicate topic names
         topic_names = [topic.name for topic in self.topics]
         if len(topic_names) != len(set(topic_names)):

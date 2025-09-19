@@ -1,6 +1,7 @@
 """
 Cache data models.
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -9,6 +10,7 @@ from typing import Optional
 @dataclass
 class CitationCache:
     """Cache entry for citation information."""
+
     pmid: str
     citation_count: int
     last_updated: datetime
@@ -32,6 +34,7 @@ class CitationCache:
 @dataclass
 class ImpactFactorCache:
     """Cache entry for journal impact factor."""
+
     journal_name: str
     impact_factor: float
     year: int
@@ -58,6 +61,7 @@ class ImpactFactorCache:
 @dataclass
 class PaperMetadataCache:
     """Cache entry for paper metadata."""
+
     pmid: str
     title: str
     authors_json: str  # JSON serialized list of authors

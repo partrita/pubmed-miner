@@ -1,6 +1,7 @@
 """
 Data models for paper-related structures.
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional
@@ -9,6 +10,7 @@ from typing import List, Optional
 @dataclass
 class Paper:
     """Core paper data model."""
+
     pmid: str
     title: str
     authors: List[str]
@@ -32,6 +34,7 @@ class Paper:
 @dataclass
 class ScoredPaper(Paper):
     """Paper with scoring information."""
+
     citation_count: int = 0
     impact_factor: float = 0.0
     score: float = 0.0

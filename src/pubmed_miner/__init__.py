@@ -10,19 +10,19 @@ __author__ = "taeyoon kim"
 
 # Import main models for easy access
 from .models import (
-    Paper, 
-    ScoredPaper, 
-    TopicConfig, 
-    GitHubConfig, 
-    ScoringWeights, 
-    SystemConfig
+    Paper,
+    ScoredPaper,
+    TopicConfig,
+    GitHubConfig,
+    ScoringWeights,
+    SystemConfig,
 )
 
 __all__ = [
-    'Paper',
-    'ScoredPaper',
-    'TopicConfig', 
-    'GitHubConfig',
-    'ScoringWeights',
-    'SystemConfig'
+    "Paper",
+    "ScoredPaper",
+    "TopicConfig",
+    "GitHubConfig",
+    "ScoringWeights",
+    "SystemConfig",
 ]

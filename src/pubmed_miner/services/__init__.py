@@ -7,9 +7,9 @@ from .impact_factor_service import ImpactFactorService
 from .github_manager import GitHubIssuesManager
 
 __all__ = [
-    'PaperCollectionService',
-    'PaperDetailsService',
-    'CitationService',
-    'ImpactFactorService',
-    'GitHubIssuesManager'
+    "PaperCollectionService",
+    "PaperDetailsService",
+    "CitationService",
+    "ImpactFactorService",
+    "GitHubIssuesManager",
 ]
