@@ -42,12 +42,11 @@ jobs:
       with:
         fetch-depth: 0
     
-    # [변경] GitHub 캐시를 활용하여 Python을 먼저 설치합니다.
+    # Python 설정 - pyproject.toml의 requires-python에 맞춰 3.9 사용
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        # pyproject.toml에 명시된 Python 버전을 사용하도록 설정
-        python-version-file: 'pyproject.toml'
+        python-version: '3.9'
     
     # [변경] 공식 액션을 사용하여 uv를 설치하고 캐시를 활성화합니다.
     - name: Install uv and Enable Cache
@@ -77,15 +76,19 @@ jobs:
     - name: Run automated collection
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        PUBMED_EMAIL: ${{ secrets.PUBMED_EMAIL || 'pubmed.miner@example.com' }}
+        PUBMED_EMAIL: ${{ secrets.PUBMED_EMAIL || 'partrita@gmail.com' }}
         LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_RUN_ID: ${{ github.run_id }}
         
-      # [변경] 'uv run'을 사용하여 스크립트를 실행합니다.
+      # uv run을 사용하여 스크립트를 실행합니다.
       run: |
         echo "Starting automated essential papers collection..."
+        echo "Repository: $GITHUB_REPOSITORY"
+        echo "Triggered by: $GITHUB_ACTOR"
+        echo "Run ID: $GITHUB_RUN_ID"
+        echo "Log level: $LOG_LEVEL"
         uv run python automated_collection.py
     
     - name: Upload logs
