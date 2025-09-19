@@ -74,13 +74,8 @@ jobs:
         fi
 
     - name: Validate configuration
-      # [변경] 'uv run'을 사용하여 uv가 관리하는 환경에서 스크립트를 실행합니다.
-      run: uv run python -c "
-        from src.pubmed_miner.utils.config_manager import ConfigurationManager;
-        config_manager = ConfigurationManager();
-        config_manager.validate_config();
-        print('Configuration validation successful')
-        "
+      # 설정 파일 유효성 검사
+      run: uv run python scripts/validate_config.py
     
     - name: Create logs directory
       run: mkdir -p logs
