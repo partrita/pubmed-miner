@@ -4,44 +4,44 @@
 # Each topic will generate a separate GitHub issue with recommended papers.
 
 topics:
-  # Machine Learning in Healthcare
-  - name: "machine-learning-healthcare"
-    query: "machine learning AND healthcare"
-    max_papers: 50
-    essential_count: 15
-    enabled: true
-
-  # # COVID-19 Treatment Research
-  # - name: "covid-19-treatment"
-  #   query: "COVID-19 AND treatment"
-  #   max_papers: 50
-  #   essential_count: 10
-  #   enabled: true
-
-  # # CRISPR Gene Editing
-  # - name: "crispr-gene-editing"
-  #   query: "CRISPR AND gene editing"
-  #   max_papers: 50
-  #   essential_count: 12
-  #   enabled: true
-
-  # Cancer Immunotherapy
-  - name: "cancer-immunotherapy"
-    query: "cancer AND immunotherapy"
-    max_papers: 50
-    essential_count: 20
-    enabled: true
-
-  # Artificial Intelligence Drug Discovery
-  - name: "ai-drug-discovery"
-    query: "artificial intelligence AND drug discovery"
-    max_papers: 60
-    essential_count: 15
-    enabled: false  # Disabled example
-
 # Configuration Notes:
 # - name: Unique identifier for the topic (used in GitHub issue titles)
 # - query: PubMed search query string
 # - max_papers: Maximum number of papers to retrieve from PubMed
 # - essential_count: Number of top papers to include in the essential list
 # - enabled: Whether to process this topic (set to false to temporarily disable)
+
+  # Machine Learning in Healthcare
+  - name: "machine-learning-antibody"
+    query: "machine learning AND antibody"
+    max_papers: 100
+    essential_count: 3
+    enabled: true
+
+  # Cancer Immunotherapy
+  - name: "cancer-immunotherapy"
+    query: "cancer AND immunotherapy"
+    max_papers: 100
+    essential_count: 3
+    enabled: true
+
+  # Artificial Intelligence Drug Discovery
+  - name: "ai-drug-discovery"
+    query: "artificial intelligence AND drug discovery"
+    max_papers: 100
+    essential_count: 3
+    enabled: true  # Disabled example
+
+  # De novo protein design
+  - name: "de-novo-protein-design"
+    query: "de novo design AND artificial intelligence AND protein design"
+    max_papers: 100
+    essential_count: 3
+    enabled: true  # Disabled example
+
+  # bioinformatics
+  - name: "bioinformatics"
+    query: "bioinformatics AND machine learning AND deep learning"
+    max_papers: 100
+    essential_count: 3
+    enabled: true  # Disabled example
