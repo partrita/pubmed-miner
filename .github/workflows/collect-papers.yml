@@ -18,8 +18,8 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'pyproject.toml' # 의존성 파일을 pyproject.toml로 변경
-      - 'uv.lock' # lock 파일도 변경 사항을 감지하도록 추가
+      - 'pyproject.toml'
+      - 'uv.lock'
       - 'config/**'
       - 'src/**'
       - 'automated_collection.py'
@@ -28,8 +28,6 @@ on:
 jobs:
   collect-papers:
     runs-on: ubuntu-latest
-    
-    # [변경] 실행 시간 제한을 2시간(120분)으로 늘렸습니다. 필요에 따라 조절할 수 있습니다.
     timeout-minutes: 120
     
     permissions:
@@ -42,23 +40,17 @@ jobs:
       with:
         fetch-depth: 0
     
-    # Python 설정 - pyproject.toml의 requires-python에 맞춰 3.9 사용
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.9'
     
-    # [변경] 공식 액션을 사용하여 uv를 설치하고 캐시를 활성화합니다.
     - name: Install uv and Enable Cache
       uses: astral-sh/setup-uv@v1
       with:
-        # 내장 캐시 기능을 활성화하여 다음 실행 속도를 높입니다.
         enable-cache: true
 
-    # [변경] 여러 pip 명령어를 하나의 uv 명령어로 통합합니다.
     - name: Install dependencies
-      # CI 환경에서는 lockfile을 업데이트하고 sync 실행
-      # 프로덕션에서는 정확한 버전 재현을 위해 lock 파일 사용
       run: |
         if [ -f "uv.lock" ]; then
           echo "Lockfile exists, attempting locked sync..."
@@ -74,7 +66,6 @@ jobs:
         fi
 
     - name: Validate configuration
-      # 설정 파일 유효성 검사
       run: uv run python scripts/validate_config.py
     
     - name: Create logs directory
@@ -88,15 +79,9 @@ jobs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_RUN_ID: ${{ github.run_id }}
-        
-      # uv run을 사용하여 스크립트를 실행합니다.
       run: |
         echo "Starting automated essential papers collection..."
-        echo "Repository: $GITHUB_REPOSITORY"
-        echo "Triggered by: $GITHUB_ACTOR"
-        echo "Run ID: $GITHUB_RUN_ID"
-        echo "Log level: $LOG_LEVEL"
-        uv run python automated_collection.py
+        uv run python automated_collection.py > logs/collection_output.txt 2>&1
     
     - name: Upload logs
       uses: actions/upload-artifact@v4
@@ -117,3 +102,42 @@ jobs:
           echo "No log file found"
         fi
         echo "=== End Summary ==="
+
+    - name: Create or Update Issue
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          const newBody = fs.readFileSync('logs/collection_output.txt', 'utf8');
+          const issueTitle = "📚 Essential Papers Collection Report";
+
+          // 동일 제목의 열린 issue 검색
+          const { data: issues } = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: "open",
+            labels: "automated-report"
+          });
+
+          const existing = issues.find(issue => issue.title === issueTitle);
+          
+          if (existing) {
+            console.log(`Appending to existing issue #${existing.number}`);
+            const updatedBody = `${existing.body}\n\n---\n\n### Update (${new Date().toISOString()})\n${newBody}`;
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existing.number,
+              body: updatedBody
+            });
+          } else {
+            console.log("Creating new issue");
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issueTitle,
+              body: `### Initial Report (${new Date().toISOString()})\n${newBody}`,
+              labels: ["automated-report"]
+            });
+          }
