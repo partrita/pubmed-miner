@@ -103,16 +103,17 @@ jobs:
         fi
         echo "=== End Summary ==="
 
-    - name: Create or Update Issue
+    - name: Create or Update Issue with truncate
       uses: actions/github-script@v7
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
           const fs = require('fs');
-          const newBody = fs.readFileSync('logs/collection_output.txt', 'utf8');
+          let newBody = fs.readFileSync('logs/collection_output.txt', 'utf8');
+          const MAX_BODY_LENGTH = 60000;
           const issueTitle = "📚 Essential Papers Collection Report";
 
-          // 동일 제목의 열린 issue 검색
+          // 기존 열린 이슈 검색
           const { data: issues } = await github.rest.issues.listForRepo({
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -124,7 +125,22 @@ jobs:
           
           if (existing) {
             console.log(`Appending to existing issue #${existing.number}`);
-            const updatedBody = `${existing.body}\n\n---\n\n### Update (${new Date().toISOString()})\n${newBody}`;
+
+            // 새로 추가할 본문 길이 제한
+            if (newBody.length > MAX_BODY_LENGTH) {
+              newBody = newBody.substring(newBody.length - MAX_BODY_LENGTH);
+              newBody = "...[truncated]\n" + newBody;
+            }
+
+            // 업데이트할 본문 (기존 + 구분선 + 새 로그)
+            let updatedBody = existing.body + "\n\n---\n\n### Update (" + new Date().toISOString() + ")\n" + newBody;
+
+            // 전체 길이도 제한 (넘으면 앞부분 자름)
+            if (updatedBody.length > MAX_BODY_LENGTH) {
+              updatedBody = updatedBody.substring(updatedBody.length - MAX_BODY_LENGTH);
+              updatedBody = "...[truncated]\n" + updatedBody;
+            }
+
             await github.rest.issues.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -133,11 +149,19 @@ jobs:
             });
           } else {
             console.log("Creating new issue");
+
+            if (newBody.length > MAX_BODY_LENGTH) {
+              newBody = newBody.substring(newBody.length - MAX_BODY_LENGTH);
+              newBody = "### Initial Report (" + new Date().toISOString() + ")\n...[truncated]\n" + newBody;
+            } else {
+              newBody = "### Initial Report (" + new Date().toISOString() + ")\n" + newBody;
+            }
+
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: issueTitle,
-              body: `### Initial Report (${new Date().toISOString()})\n${newBody}`,
+              body: newBody,
               labels: ["automated-report"]
             });
           }
