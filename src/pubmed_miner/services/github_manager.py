@@ -67,22 +67,24 @@ class GitHubIssuesManager:
         if self.mock_mode:
             return self._mock_create_or_update_issue(topic, papers)
 
-        issue_title = f"[Essential Papers] {topic}"
+        # Include date in title to prevent duplicates
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        issue_title = f"[Essential Papers] {topic} - {current_date}"
 
-        # Check if issue already exists
-        existing_issue = self.find_existing_issue(topic)
+        # Check if issue already exists for today
+        existing_issue = self.find_existing_issue_for_date(topic, current_date)
 
         if existing_issue:
             logger.info(
-                f"Updating existing issue #{existing_issue['number']} for topic: {topic}"
+                f"Updating existing issue #{existing_issue['number']} for topic: {topic} ({current_date})"
             )
             return self._update_issue(existing_issue, papers)
         else:
-            logger.info(f"Creating new issue for topic: {topic}")
+            logger.info(f"Creating new issue for topic: {topic} ({current_date})")
             return self._create_issue(issue_title, papers)
 
     def find_existing_issue(self, topic: str) -> Optional[Dict[str, Any]]:
-        """Find existing issue for a topic.
+        """Find existing issue for a topic (legacy method for backward compatibility).
 
         Args:
             topic: Topic name
@@ -111,6 +113,46 @@ class GitHubIssuesManager:
                 issue = issues[0]
                 logger.debug(
                     f"Found existing issue #{issue['number']} for topic: {topic}"
+                )
+                return issue
+
+            return None
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error searching for existing issue: {e}")
+            return None
+
+    def find_existing_issue_for_date(self, topic: str, date: str) -> Optional[Dict[str, Any]]:
+        """Find existing issue for a topic on a specific date.
+
+        Args:
+            topic: Topic name
+            date: Date string in YYYY-MM-DD format
+
+        Returns:
+            Issue dictionary or None if not found
+        """
+        if self.mock_mode:
+            return self._mock_find_existing_issue(topic)
+
+        try:
+            search_query = (
+                f'repo:{self.config.repository} is:issue "[Essential Papers] {topic} - {date}"'
+            )
+            url = f"{self.base_url}/search/issues"
+            params = {"q": search_query}
+
+            response = requests.get(url, headers=self.headers, params=params)
+            response.raise_for_status()
+
+            data = response.json()
+            issues = data.get("items", [])
+
+            if issues:
+                # Return the first matching issue
+                issue = issues[0]
+                logger.debug(
+                    f"Found existing issue #{issue['number']} for topic: {topic} on {date}"
                 )
                 return issue
 
@@ -535,18 +577,19 @@ class GitHubIssuesManager:
         self, topic: str, papers: List[ScoredPaper]
     ) -> Dict[str, Any]:
         """Mock implementation for creating/updating issues."""
-        logger.info(f"[MOCK] Creating/updating issue for topic: {topic}")
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        logger.info(f"[MOCK] Creating/updating issue for topic: {topic} ({current_date})")
         logger.info(f"[MOCK] Would process {len(papers)} papers")
 
         # Simulate issue data
         mock_issue = {
-            "number": hash(topic) % 10000,  # Generate consistent fake issue number
-            "title": f"[Essential Papers] {topic}",
+            "number": hash(f"{topic}_{current_date}") % 10000,  # Generate consistent fake issue number with date
+            "title": f"[Essential Papers] {topic} - {current_date}",
             "body": self.format_paper_list(papers),
             "state": "open",
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
-            "html_url": f"https://github.com/{self.config.repository}/issues/{hash(topic) % 10000}",
+            "html_url": f"https://github.com/{self.config.repository}/issues/{hash(f'{topic}_{current_date}') % 10000}",
             "user": {"login": "mock_user"},
         }
 
@@ -578,10 +621,10 @@ class GitHubIssuesManager:
             "user": {"login": "mock_user"},
         }
 
-    def _mock_create_or_update_issue(
+    def _mock_create_or_update_issue_legacy(
         self, topic: str, papers: List[ScoredPaper]
     ) -> Dict[str, Any]:
-        """Mock version of create_or_update_issue for local testing.
+        """Mock version of create_or_update_issue for local testing (legacy method).
 
         Args:
             topic: Topic name
@@ -592,9 +635,10 @@ class GitHubIssuesManager:
         """
         import random
 
+        current_date = datetime.now().strftime('%Y-%m-%d')
         issue_number = random.randint(1, 1000)
 
-        logger.info(f"[MOCK MODE] Would create/update issue for topic: {topic}")
+        logger.info(f"[MOCK MODE] Would create/update issue for topic: {topic} ({current_date})")
         logger.info(f"[MOCK MODE] Issue would contain {len(papers)} papers")
 
         # Log paper details for verification
@@ -608,7 +652,7 @@ class GitHubIssuesManager:
 
         return {
             "number": issue_number,
-            "title": f"[Essential Papers] {topic}",
+            "title": f"[Essential Papers] {topic} - {current_date}",
             "html_url": f"https://github.com/{self.config.repository}/issues/{issue_number}",
             "state": "open",
             "created": True,
