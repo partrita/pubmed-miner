@@ -137,7 +137,7 @@ class GitHubIssuesManager:
 
         try:
             search_query = (
-                f'repo:{self.config.repository} is:issue "[Essential Papers] {topic} - {date}"'
+                f'repo:{self.config.repository} is:issue "{date}: {topic} "'
             )
             url = f"{self.base_url}/search/issues"
             params = {"q": search_query}
