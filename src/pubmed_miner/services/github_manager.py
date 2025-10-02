@@ -69,8 +69,7 @@ class GitHubIssuesManager:
 
         # Include date in title to prevent duplicates
         current_date = datetime.now().strftime('%Y-%m-%d')
-        issue_title = f"[Essential Papers] {topic} - {current_date}"
-
+        issue_title = f"{current_date}: {topic} papers"
         # Check if issue already exists for today
         existing_issue = self.find_existing_issue_for_date(topic, current_date)
 
@@ -137,7 +136,7 @@ class GitHubIssuesManager:
 
         try:
             search_query = (
-                f'repo:{self.config.repository} is:issue "{date}: {topic} "'
+                f'repo:{self.config.repository} is:issue "{date}: {topic} papers"'
             )
             url = f"{self.base_url}/search/issues"
             params = {"q": search_query}
@@ -583,8 +582,7 @@ class GitHubIssuesManager:
 
         # Simulate issue data
         mock_issue = {
-            "number": hash(f"{topic}_{current_date}") % 10000,  # Generate consistent fake issue number with date
-            "title": f"[Essential Papers] {topic} - {current_date}",
+            "title": f"{current_date}: {topic} papers",
             "body": self.format_paper_list(papers),
             "state": "open",
             "created_at": datetime.now().isoformat(),
@@ -652,7 +650,7 @@ class GitHubIssuesManager:
 
         return {
             "number": issue_number,
-            "title": f"[Essential Papers] {topic} - {current_date}",
+            "title": f"{current_date}: {topic} papers",
             "html_url": f"https://github.com/{self.config.repository}/issues/{issue_number}",
             "state": "open",
             "created": True,
@@ -660,14 +658,3 @@ class GitHubIssuesManager:
             "body": self.format_paper_list(papers),
         }
 
-    def _mock_find_existing_issue(self, topic: str) -> Optional[Dict[str, Any]]:
-        """Mock version of find_existing_issue for local testing.
-
-        Args:
-            topic: Topic name
-
-        Returns:
-            None (always assume no existing issue in mock mode)
-        """
-        logger.debug(f"[MOCK MODE] Searching for existing issue for topic: {topic}")
-        return None  # Always assume no existing issue for simplicity

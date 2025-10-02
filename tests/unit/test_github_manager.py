@@ -63,7 +63,8 @@ class TestGitHubIssuesManager:
         assert result["mock_mode"] is True
         assert result["created"] is True
         assert "number" in result
-        assert result["title"] == "[Essential Papers] test-topic"
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        assert result["title"] == f"{current_date}: test-topic papers"
         assert "html_url" in result
         assert "body" in result
 
@@ -128,15 +129,15 @@ class TestGitHubIssuesManager:
         mock_response.status_code = 201
         mock_response.json.return_value = {
             "number": 43,
-            "title": "[Essential Papers] test-topic",
+            "title": "2025-10-02: test-topic papers",
             "html_url": "https://github.com/testuser/testrepo/issues/43",
         }
         mock_post.return_value = mock_response
 
-        issue = self.manager._create_issue("test-topic", "Issue body content")
+        issue = self.manager._create_issue("2025-10-02: test-topic papers", "Issue body content")
 
         assert issue["number"] == 43
-        assert issue["title"] == "[Essential Papers] test-topic"
+        assert issue["title"] == "2025-10-02: test-topic papers"
 
         # Verify API call
         mock_post.assert_called_once()
@@ -145,7 +146,7 @@ class TestGitHubIssuesManager:
 
         # Check request body
         request_data = call_args[1]["json"]
-        assert request_data["title"] == "[Essential Papers] test-topic"
+        assert request_data["title"] == "2025-10-02: test-topic papers"
         assert request_data["body"] == "Issue body content"
         assert request_data["labels"] == ["essential-papers", "automated"]
 
@@ -156,7 +157,7 @@ class TestGitHubIssuesManager:
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "number": 42,
-            "title": "[Essential Papers] test-topic",
+            "title": "2025-10-02: test-topic papers",
             "html_url": "https://github.com/testuser/testrepo/issues/42",
         }
         mock_patch.return_value = mock_response
@@ -193,7 +194,7 @@ class TestGitHubIssuesManager:
         assert "No essential papers found" in body
         assert "test-topic" in body
 
-    @patch.object(GitHubIssuesManager, "_find_existing_issue")
+    @patch.object(GitHubIssuesManager, "find_existing_issue_for_date")
     @patch.object(GitHubIssuesManager, "_create_issue")
     def test_create_or_update_issue_new(self, mock_create, mock_find):
         """Test creating a new issue when none exists."""
@@ -211,17 +212,19 @@ class TestGitHubIssuesManager:
 
         assert result["created"] is True
         assert result["number"] == 43
-        mock_find.assert_called_once_with("test-topic")
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        mock_find.assert_called_once_with("test-topic", current_date)
         mock_create.assert_called_once()
 
-    @patch.object(GitHubIssuesManager, "_find_existing_issue")
+    @patch.object(GitHubIssuesManager, "find_existing_issue_for_date")
     @patch.object(GitHubIssuesManager, "_update_issue")
     def test_create_or_update_issue_existing(self, mock_update, mock_find):
         """Test updating an existing issue."""
         # Mock existing issue
+        current_date = datetime.now().strftime('%Y-%m-%d')
         mock_find.return_value = {
             "number": 42,
-            "title": "[Essential Papers] test-topic",
+            "title": f"{current_date}: test-topic papers",
         }
 
         # Mock successful update
@@ -235,12 +238,11 @@ class TestGitHubIssuesManager:
 
         assert result["updated"] is True
         assert result["number"] == 42
-        mock_find.assert_called_once_with("test-topic")
-        mock_update.assert_called_once_with(42, mock_update.call_args[0][1])
+        mock_find.assert_called_once_with("test-topic", current_date)
+        mock_update.assert_called_once_with(mock_find.return_value, self.sample_papers)
 
     def test_create_or_update_issue_empty_papers(self):
-        """Test creating/updating issue with empty papers list."""
-        with patch.object(self.manager, "_find_existing_issue") as mock_find:
+        with patch.object(self.manager, "find_existing_issue_for_date") as mock_find:
             mock_find.return_value = None
 
             with patch.object(self.manager, "_create_issue") as mock_create:
@@ -437,7 +439,7 @@ class TestGitHubIssuesManager:
 
         def create_issue(topic):
             try:
-                with patch.object(self.manager, "_find_existing_issue") as mock_find:
+                with patch.object(self.manager, "find_existing_issue_for_date") as mock_find:
                     mock_find.return_value = None
                     with patch.object(self.manager, "_create_issue") as mock_create:
                         mock_create.return_value = {"number": 42, "created": True}
