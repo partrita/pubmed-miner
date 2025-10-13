@@ -19,6 +19,13 @@ topics:
     enabled: true
 
   # Cancer Immunotherapy
+  - name: "treg-cell"
+    query: "treg AND cancer AND immunotherapy"
+    max_papers: 100
+    essential_count: 3
+    enabled: true
+
+ # Cancer Immunotherapy
   - name: "cancer-immunotherapy"
     query: "cancer AND immunotherapy"
     max_papers: 100
