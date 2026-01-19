@@ -16,21 +16,21 @@ topics:
     query: "machine learning AND antibody"
     max_papers: 100
     essential_count: 3
-    enabled: true
+    enabled: false
 
   # Cancer Immunotherapy
   - name: "treg-cell"
     query: "treg AND cancer AND immunotherapy"
     max_papers: 100
     essential_count: 3
-    enabled: true
+    enabled: false
 
  # Cancer Immunotherapy
   - name: "cancer-immunotherapy"
     query: "cancer AND immunotherapy"
     max_papers: 100
     essential_count: 3
-    enabled: true
+    enabled: false
 
   # Artificial Intelligence Drug Discovery
   - name: "ai-drug-discovery"
@@ -51,4 +51,4 @@ topics:
     query: "bioinformatics AND machine learning AND deep learning"
     max_papers: 100
     essential_count: 3
-    enabled: true  # Disabled example
+    enabled: false  # Disabled example

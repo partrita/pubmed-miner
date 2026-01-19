@@ -79,11 +79,12 @@ class PaperCollectionService:
             logger.error(f"Error searching PubMed for query '{query}': {e}")
             raise APIError(f"PubMed search failed: {e}")
 
-    def get_paper_details(self, pmids: List[str]) -> List[Paper]:
+    def get_paper_details(self, pmids: List[str], topic: Optional[str] = None) -> List[Paper]:
         """Retrieve detailed information for a list of PMIDs.
 
         Args:
             pmids: List of PubMed IDs
+            topic: Optional topic name to associate with papers
 
         Returns:
             List of Paper objects with detailed metadata
@@ -99,7 +100,7 @@ class PaperCollectionService:
 
         for i in range(0, len(pmids), batch_size):
             batch = pmids[i : i + batch_size]
-            batch_papers = self._fetch_paper_batch(batch)
+            batch_papers = self._fetch_paper_batch(batch, topic=topic)
             papers.extend(batch_papers)
 
             # Rate limiting between batches
@@ -136,11 +137,12 @@ class PaperCollectionService:
         logger.info(f"Retrieved abstracts for {len(abstracts)} papers")
         return abstracts
 
-    def _fetch_paper_batch(self, pmids: List[str]) -> List[Paper]:
+    def _fetch_paper_batch(self, pmids: List[str], topic: Optional[str] = None) -> List[Paper]:
         """Fetch a batch of paper details from PubMed.
 
         Args:
             pmids: List of PubMed IDs (max 100)
+            topic: Optional topic name to associate with papers
 
         Returns:
             List of Paper objects
@@ -158,7 +160,7 @@ class PaperCollectionService:
             papers = []
             for record in records["PubmedArticle"]:
                 try:
-                    paper = self._parse_paper_record(record)
+                    paper = self._parse_paper_record(record, topic=topic)
                     if paper:
                         papers.append(paper)
                 except Exception as e:
@@ -208,11 +210,12 @@ class PaperCollectionService:
             logger.error(f"Error fetching abstracts for batch: {e}")
             return {}
 
-    def _parse_paper_record(self, record: Dict) -> Optional[Paper]:
+    def _parse_paper_record(self, record: Dict, topic: Optional[str] = None) -> Optional[Paper]:
         """Parse a PubMed record into a Paper object.
 
         Args:
             record: PubMed XML record as dictionary
+            topic: Optional topic name to associate with the paper
 
         Returns:
             Paper object or None if parsing fails
@@ -259,6 +262,7 @@ class PaperCollectionService:
                 publication_date=pub_date,
                 abstract=abstract,
                 doi=doi,
+                topic=topic,
             )
 
         except Exception as e:

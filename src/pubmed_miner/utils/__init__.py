@@ -4,6 +4,7 @@ from .config_manager import ConfigurationManager
 from .validators import ConfigValidator
 from .cache import CacheManager
 from .change_tracker import ChangeTracker
+from .csv_manager import CSVManager
 from .error_handler import (
     ErrorHandler,
     APIError,
@@ -20,6 +21,7 @@ __all__ = [
     "ConfigValidator",
     "CacheManager",
     "ChangeTracker",
+    "CSVManager",
     "ErrorHandler",
     "APIError",
     "DataError",

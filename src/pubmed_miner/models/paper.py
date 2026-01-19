@@ -18,6 +18,7 @@ class Paper:
     publication_date: datetime
     abstract: Optional[str] = None
     doi: Optional[str] = None
+    topic: Optional[str] = None
 
     def __post_init__(self):
         """Validate paper data after initialization."""

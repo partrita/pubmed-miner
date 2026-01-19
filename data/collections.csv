@@ -1,0 +1,4 @@
+pmid,title,authors,journal,publication_date,doi,abstract,topic,citation_count,impact_factor,score,rank
+11111111,Highly Cited Research,Dr. Einstein,Science,2023-06-01T00:00:00,10.1234/score.2023.001,,cancer-immunotherapy,150,42.5,95.5,1
+22222222,Important Study,Prof. Newton,Nature,2023-07-15T00:00:00,10.1234/score.2023.002,,de-novo-protein-design,87,39.8,78.3,2
+99999999,Additional Paper,New Author,Journal of Examples,2024-01-19T00:00:00,10.1234/additional.2024.001,,bioinformatics
