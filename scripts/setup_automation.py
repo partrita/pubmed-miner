@@ -162,7 +162,7 @@ def show_setup_instructions():
 
     print("\n5. 🧪 Testing:")
     print("   - Run this script again to validate your setup")
-    print("   - Test manually with: python automated_collection.py")
+    print("   - Test manually with: python scripts/automated_collection.py")
 
 
 def main():
@@ -187,7 +187,7 @@ def main():
 
     if env_ok and config_ok and github_ok:
         print("\n🎉 Setup complete! Your automation is ready to run.")
-        print("   You can test it manually with: python automated_collection.py")
+        print("   You can test it manually with: python scripts/automated_collection.py")
     else:
         print("\n⚠️  Setup incomplete. Please address the issues above.")
         show_setup_instructions()

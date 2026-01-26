@@ -74,7 +74,7 @@
 먼저 구성 파일을 설정합니다:
 
 ```bash
-uv run python setup_automation.py
+uv run python scripts/setup_automation.py
 ```
 
 이 명령은 `config/` 디렉토리에 필요한 구성 파일을 생성합니다.
@@ -137,7 +137,7 @@ pubmed:
 
 시스템을 수동으로 테스트:
 ```bash
-uv run python automated_collection.py
+uv run python scripts/automated_collection.py
 ```
 
 이 명령은 다음을 수행합니다:
@@ -296,8 +296,9 @@ pubmed-miner/
 │   ├── topics.yaml            # 연구 주제 구성
 │   └── settings.yaml          # 시스템 설정
 ├── .github/workflows/          # GitHub Actions 워크플로우
-├── automated_collection.py     # 메인 자동화 스크립트
-├── setup_automation.py        # 설정 및 검증 스크립트
+├── scripts/                    # 실행 스크립트
+│   ├── automated_collection.py # 메인 자동화 스크립트
+│   └── setup_automation.py    # 설정 및 검증 스크립트
 └── pyproject.toml             # 프로젝트 구성 및 의존성
 ```
 ```
@@ -446,7 +447,7 @@ logging:
 
 또는 디버그 플래그로 실행:
 ```bash
-uv run python automated_collection.py --debug
+uv run python scripts/automated_collection.py --debug
 ```
 
 ### 로그 파일
@@ -522,10 +523,10 @@ A: PubMed: ~초당 3개 요청, GitHub: 시간당 5000개 요청. 시스템에�
 
 ```bash
 # GitHub 토큰 없이 실행 (모의 모드 사용)
-uv run python automated_collection.py
+uv run python scripts/automated_collection.py
 
 # 설정 검증 실행
-uv run python setup_automation.py
+uv run python scripts/setup_automation.py
 
 # 특정 테스트 실행
 uv run pytest tests/unit/

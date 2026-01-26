@@ -22,7 +22,7 @@ on:
       - 'uv.lock'
       - 'config/**'
       - 'src/**'
-      - 'automated_collection.py'
+      - 'scripts/automated_collection.py'
       - '.github/workflows/collect-papers.yml'
 
 jobs:
@@ -90,15 +90,15 @@ jobs:
         echo "Triggered by: $GITHUB_ACTOR"
         echo "Run ID: $GITHUB_RUN_ID"
         echo "Log level: $LOG_LEVEL"
-        uv run python automated_collection.py
+        uv run python scripts/automated_collection.py
     
     - name: Commit and Push Data
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git add data/collections.csv
+        git add data/collections.csv book_src/
         if ! git diff --staged --quiet; then
-          git commit -m "Update paper collections data"
+          git commit -m "Update paper collections data and generated pages"
           git push
         fi
 
