@@ -3,13 +3,13 @@
 Automated Essential Papers Collection Script
 
 This script orchestrates the complete workflow for collecting, scoring, and
-publishing essential papers to GitHub Issues. It's designed to be run by
+publishing essential papers to MdBook. It's designed to be run by
 GitHub Actions on a daily schedule.
 
 Requirements addressed:
 - 4.1: Read topic configurations and execute searches
 - 4.2: Daily automated execution with proper error handling
-- 4.3: GitHub Issues creation and updates
+- 4.3: MdBook page creation and updates
 """
 
 import os
@@ -29,7 +29,7 @@ from pubmed_miner.services.paper_details import PaperDetailsService
 from pubmed_miner.services.citation_service import CitationService
 from pubmed_miner.services.impact_factor_service import ImpactFactorService
 from pubmed_miner.scoring.engine import ScoringEngine
-from pubmed_miner.services.github_manager import GitHubIssuesManager
+from pubmed_miner.services.mdbook_manager import MdBookManager
 from pubmed_miner.utils.change_tracker import ChangeTracker
 from pubmed_miner.utils.error_handler import ErrorHandler
 from pubmed_miner.models import TopicConfig, ScoredPaper
@@ -57,7 +57,7 @@ class AutomatedCollectionOrchestrator:
             self.citation_service = CitationService()
             self.impact_factor_service = ImpactFactorService()
             self.scoring_engine = ScoringEngine(self.system_config.scoring_weights)
-            self.github_manager = GitHubIssuesManager(self.system_config.github)
+            self.mdbook_manager = MdBookManager()
             self.change_tracker = ChangeTracker()
             self.error_handler = ErrorHandler()
 
@@ -99,8 +99,7 @@ class AutomatedCollectionOrchestrator:
             "start_time": start_time.isoformat(),
             "topics_processed": 0,
             "papers_collected": 0,
-            "issues_created": 0,
-            "issues_updated": 0,
+            "pages_created": 0,
             "errors": [],
             "success": False,
         }
@@ -127,10 +126,8 @@ class AutomatedCollectionOrchestrator:
                         "papers_collected", 0
                     )
 
-                    if topic_result.get("issue_created"):
-                        results["issues_created"] += 1
-                    elif topic_result.get("issue_updated"):
-                        results["issues_updated"] += 1
+                    if topic_result.get("page_created"):
+                        results["pages_created"] += 1
 
                 except Exception as e:
                     error_msg = f"Failed to process topic '{topic.name}': {str(e)}"
@@ -176,8 +173,7 @@ class AutomatedCollectionOrchestrator:
             "topic_name": topic.name,
             "papers_collected": 0,
             "essential_papers": 0,
-            "issue_created": False,
-            "issue_updated": False,
+            "page_created": False,
             "changes_detected": False,
         }
 
@@ -265,18 +261,15 @@ class AutomatedCollectionOrchestrator:
             changes = self.change_tracker.detect_changes(topic.name, essential_papers)
             result["changes_detected"] = changes["has_changes"]
 
-            # Step 6: Create or update GitHub issue
+            # Step 6: Create MdBook page
             if essential_papers:
-                issue_result = self.github_manager.create_or_update_issue(
+                relative_path = self.mdbook_manager.create_daily_page(
                     topic.name, essential_papers
                 )
-
-                if issue_result.get("created"):
-                    result["issue_created"] = True
-                    self.logger.info(f"Created new issue for topic: {topic.name}")
-                elif issue_result.get("updated"):
-                    result["issue_updated"] = True
-                    self.logger.info(f"Updated existing issue for topic: {topic.name}")
+                self.mdbook_manager.update_summary(relative_path, topic.name)
+                
+                result["page_created"] = True
+                self.logger.info(f"Created mdbook page for topic: {topic.name}")
 
                 # Update change tracking
                 self.change_tracker.save_paper_snapshot(topic.name, essential_papers)
@@ -335,12 +328,6 @@ class AutomatedCollectionOrchestrator:
 def main():
     """Main entry point for the automated collection script."""
     try:
-        # Check if GitHub token is available (warn if not, but don't fail)
-        if not os.getenv("GITHUB_TOKEN"):
-            print(
-                "Warning: GITHUB_TOKEN not found - GitHub features will run in mock mode for local testing"
-            )
-
         # Initialize and run orchestrator
         orchestrator = AutomatedCollectionOrchestrator()
         results = orchestrator.run_complete_workflow()

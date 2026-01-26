@@ -31,8 +31,7 @@ jobs:
     timeout-minutes: 120
     
     permissions:
-      issues: write
-      contents: read
+      contents: write
     
     steps:
     - name: Checkout repository
@@ -48,7 +47,6 @@ jobs:
     - name: Install uv and Enable Cache
       uses: astral-sh/setup-uv@v1
       with:
-        # 내장 캐시 기능을 활성화하여 다음 실행 속도를 높입니다.
         enable-cache: true
 
     - name: Install dependencies
@@ -66,6 +64,11 @@ jobs:
           uv sync --all-extras --dev
         fi
 
+    - name: Setup mdbook
+      uses: peaceiris/actions-mdbook@v2
+      with:
+        mdbook-version: 'latest'
+
     - name: Validate configuration
       run: uv run python scripts/validate_config.py
     
@@ -74,7 +77,6 @@ jobs:
     
     - name: Run automated collection
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         PUBMED_EMAIL: ${{ secrets.PUBMED_EMAIL || 'partrita@gmail.com' }}
         LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
         GITHUB_REPOSITORY: ${{ github.repository }}
@@ -89,6 +91,17 @@ jobs:
         echo "Run ID: $GITHUB_RUN_ID"
         echo "Log level: $LOG_LEVEL"
         uv run python automated_collection.py
+    
+    - name: Build mdbook
+      run: mdbook build
+
+    - name: Deploy to GitHub Pages
+      if: success()
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./book
+        keep_files: true  # Keep existing files to accumulate history if needed, though mdbook build regenerates everything from src
     
     - name: Upload logs
       uses: actions/upload-artifact@v4
