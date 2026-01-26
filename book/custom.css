@@ -1,0 +1,22 @@
+/* Custom CSS for paper lists */
+.paper-entry {
+    border-bottom: 1px solid #eaecef;
+    padding-bottom: 2em;
+    margin-bottom: 2em;
+}
+
+.paper-title {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 0.5em;
+}
+
+.paper-meta {
+    font-size: 0.9em;
+    color: #586069;
+    margin-bottom: 1em;
+}
+
+.paper-abstract {
+    margin-top: 1em;
+}

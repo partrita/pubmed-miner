@@ -24,6 +24,7 @@ from typing import Dict, Any
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from pubmed_miner.utils.config_manager import ConfigurationManager
+from pubmed_miner.utils.csv_manager import CSVManager
 from pubmed_miner.services.paper_collection import PaperCollectionService
 from pubmed_miner.services.paper_details import PaperDetailsService
 from pubmed_miner.services.citation_service import CitationService
@@ -230,6 +231,7 @@ class AutomatedCollectionOrchestrator:
                         publication_date=paper.publication_date,
                         abstract=paper.abstract,
                         doi=paper.doi,
+                        topic=topic.name,
                         citation_count=safe_citations,
                         impact_factor=safe_impact_factor,
                         score=score,
@@ -256,6 +258,19 @@ class AutomatedCollectionOrchestrator:
                 f"Selected {len(essential_papers)} essential papers for topic: {topic.name}"
             )
             result["essential_papers"] = len(essential_papers)
+
+            # Save to CSV
+            if essential_papers:
+                try:
+                    CSVManager.save_papers(
+                        essential_papers,
+                        "data/collections.csv",
+                        include_scoring=True,
+                        append=True
+                    )
+                    self.logger.info(f"Saved {len(essential_papers)} papers to CSV")
+                except Exception as e:
+                    self.logger.error(f"Failed to save papers to CSV: {e}")
 
             # Step 5: Check for changes
             changes = self.change_tracker.detect_changes(topic.name, essential_papers)

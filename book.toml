@@ -1,10 +1,9 @@
 [book]
 authors = ["PubMed Miner"]
 language = "en"
-multilingual = false
 src = "src"
 title = "Daily Essential Papers"
 
 [output.html]
-additional-css = ["custom.css"]
+additional-css = ["src/custom.css"]
 git-repository-url = "https://github.com/partrita/pubmed-miner"
