@@ -84,7 +84,7 @@ class MdBookManager:
         
         if not self.summary_path.exists():
             with open(self.summary_path, "w") as f:
-                f.write("# Summary\n\n- [Introduction](README.md)\n\n# Daily Updates\n")
+                f.write("# 요약\n\n- [소개](README.md)\n\n# 일일 업데이트\n")
 
         with open(self.summary_path, "r") as f:
             lines = f.readlines()
@@ -104,9 +104,9 @@ class MdBookManager:
             return
 
         # Prepare year/month headers
-        year_header = f"- {current_date.year}"
+        year_header = f"- [{current_date.year}]()"
         month_name = current_date.strftime("%B")
-        month_header = f"  - {month_name}"
+        month_header = f"  - [{month_name}]()"
         
         # We need to construct the file content carefully.
         # This is a simple parser/updater.
@@ -158,14 +158,14 @@ class MdBookManager:
         lines = [
             f"# {date_str}: {topic}",
             "",
-            f"**Total Papers:** {len(papers)}",
+            f"**총 논문 수:** {len(papers)}",
             "",
-            "## Top Papers by Importance Score",
+            "## 중요도별 주요 논문",
             "",
         ]
         
         if not papers:
-             lines.append("No essential papers found for this topic today.")
+             lines.append("오늘 이 주제에 대한 필수 논문을 찾지 못했습니다.")
              return "\n".join(lines)
 
         # Sort papers by rank
@@ -181,16 +181,16 @@ class MdBookManager:
             # Meta info
             authors = ', '.join(paper.authors)
             meta = [
-                f"**Authors:** {authors}",
-                f"**Journal:** {paper.journal}",
-                f"**Date:** {paper.publication_date.strftime('%Y-%m-%d')}",
+                f"**저자:** {authors}",
+                f"**저널:** {paper.journal}",
+                f"**날짜:** {paper.publication_date.strftime('%Y-%m-%d')}",
                 f"**PMID:** [{paper.pmid}](https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/)",
             ]
             
             if paper.doi:
                 meta.append(f"**DOI:** [{paper.doi}](https://doi.org/{paper.doi})")
                 
-            meta.append(f"**Score:** {paper.score:.1f} (Citations: {paper.citation_count}, IF: {paper.impact_factor:.1f})")
+            meta.append(f"**점수:** {paper.score:.1f} (인용 수: {paper.citation_count}, IF: {paper.impact_factor:.1f})")
             
             lines.append(f'<div class="paper-meta">')
             lines.append(" | ".join(meta))
@@ -199,7 +199,7 @@ class MdBookManager:
             # Abstract
             if paper.abstract:
                 lines.append(f'<div class="paper-abstract">')
-                lines.append(f"<details><summary>Abstract</summary>")
+                lines.append(f"<details><summary>초록</summary>")
                 lines.append(f"<p>{paper.abstract}</p>")
                 lines.append(f"</details>")
                 lines.append('</div>')

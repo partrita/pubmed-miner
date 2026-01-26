@@ -1,5 +1,5 @@
-# Summary
+# 요약
 
-- [Introduction](README.md)
+- [소개](README.md)
 
-# Daily Updates
+# 일일 업데이트

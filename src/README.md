@@ -1,6 +1,6 @@
-# Daily Essential Papers
+# 일일 필수 논문 (Daily Essential Papers)
 
-Welcome to the Daily Essential Papers collection. This book is automatically updated daily with the latest essential papers from PubMed based on configured topics.
+일일 필수 논문 모음집에 오신 것을 환영합니다. 이 책은 구성된 주제를 기반으로 PubMed에서 최신 필수 논문을 자동으로 수집하여 매일 업데이트됩니다.
 
-## How it works
-The system mines PubMed for papers, scores them based on citations, impact factor, and recency, and presents the top papers here.
+## 작동 방식
+이 시스템은 PubMed에서 논문을 검색하고, 인용 수, 임팩트 팩터, 최신성을 기준으로 점수를 매겨 상위 논문을 이곳에 소개합니다.
