@@ -2,8 +2,13 @@
 Example script showing how to save collected papers to CSV.
 """
 
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 from src.pubmed_miner.models import Paper, ScoredPaper
 from src.pubmed_miner.utils import CSVManager

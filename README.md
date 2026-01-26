@@ -282,6 +282,7 @@ manager = GitHubIssuesManager(config)
 
 ```
 pubmed-miner/
+├── book_src/                   # MdBook 소스 (문서)
 ├── src/pubmed_miner/           # 메인 패키지
 │   ├── models/                 # 데이터 모델 및 구성
 │   ├── services/               # 핵심 비즈니스 로직 서비스

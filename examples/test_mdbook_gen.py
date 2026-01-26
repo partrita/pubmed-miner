@@ -10,7 +10,9 @@ from datetime import datetime
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+# Path(__file__).parent is examples/
+# Path(__file__).parent.parent is root/
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from pubmed_miner.models import ScoredPaper
 from pubmed_miner.services.mdbook_manager import MdBookManager

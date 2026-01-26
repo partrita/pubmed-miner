@@ -20,13 +20,13 @@ class MdBookManager:
         """Initialize MdBook manager.
 
         Args:
-            book_root: Root directory of the mdbook (containing src/)
+            book_root: Root directory of the mdbook (containing book_src/)
         """
         self.book_root = Path(book_root)
-        self.src_dir = self.book_root / "src"
+        self.src_dir = self.book_root / "book_src"
         self.summary_path = self.src_dir / "SUMMARY.md"
         
-        # Ensure src directory exists
+        # Ensure book_src directory exists
         self.src_dir.mkdir(parents=True, exist_ok=True)
 
     def create_daily_page(self, topic: str, papers: List[ScoredPaper]) -> str:
@@ -37,14 +37,14 @@ class MdBookManager:
             papers: List of essential papers
 
         Returns:
-            Path to the created file relative to src/
+            Path to the created file relative to book_src/
         """
         current_date = datetime.now()
         year = current_date.strftime("%Y")
         month = current_date.strftime("%m")
         day = current_date.strftime("%d")
         
-        # Create directory structure: src/year/month/
+        # Create directory structure: book_src/year/month/
         topic_slug = topic.lower().replace(" ", "_")
         daily_dir = self.src_dir / year / month
         daily_dir.mkdir(parents=True, exist_ok=True)
@@ -67,7 +67,7 @@ class MdBookManager:
         """Update SUMMARY.md to include the new page.
         
         Args:
-            relative_path: Path to the new page relative to src/
+            relative_path: Path to the new page relative to book_src/
             topic: Topic name
         """
         current_date = datetime.now()
@@ -158,7 +158,7 @@ class MdBookManager:
         lines = [
             f"# {date_str}: {topic}",
             "",
-            f"**총 논문 수:** {len(papers)}",
+            f"총 논문 수: {len(papers)}",
             "",
             "## 중요도별 주요 논문",
             "",
@@ -178,23 +178,21 @@ class MdBookManager:
             lines.append(f'<div class="paper-entry">')
             lines.append(f'<div class="paper-title">{paper.rank}. {paper.title}</div>')
             
-            # Meta info
+            # Authors and Journal info
             authors = ', '.join(paper.authors)
-            meta = [
-                f"**저자:** {authors}",
-                f"**저널:** {paper.journal}",
-                f"**날짜:** {paper.publication_date.strftime('%Y-%m-%d')}",
-                f"**PMID:** [{paper.pmid}](https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/)",
-            ]
-            
-            if paper.doi:
-                meta.append(f"**DOI:** [{paper.doi}](https://doi.org/{paper.doi})")
-                
-            meta.append(f"**점수:** {paper.score:.1f} (인용 수: {paper.citation_count}, IF: {paper.impact_factor:.1f})")
-            
             lines.append(f'<div class="paper-meta">')
-            lines.append(" | ".join(meta))
+            lines.append(f"저자: {authors}<br>")
+            lines.append(f"저널: {paper.journal}")
             lines.append('</div>')
+            lines.append("")
+            
+            # Meta info table
+            doi_link = f"[{paper.doi}](https://doi.org/{paper.doi})" if paper.doi else "-"
+            
+            lines.append("| 날짜 | PMID | DOI | 점수 (인용/IF) |")
+            lines.append("|:---:|:---:|:---:|:---:|")
+            lines.append(f"| {paper.publication_date.strftime('%Y-%m-%d')} | [{paper.pmid}](https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/) | {doi_link} | {paper.score:.1f} ({paper.citation_count}/{paper.impact_factor:.1f}) |")
+            lines.append("")
 
             # Abstract
             if paper.abstract:

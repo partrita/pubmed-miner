@@ -21,7 +21,9 @@ from pathlib import Path
 from typing import Dict, Any
 
 # Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+# Path(__file__).parent is scripts/
+# Path(__file__).parent.parent is root/
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from pubmed_miner.utils.config_manager import ConfigurationManager
 from pubmed_miner.utils.csv_manager import CSVManager

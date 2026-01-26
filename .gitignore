@@ -117,3 +117,6 @@ cache/
 # Temporary files
 *.tmp
 *.temp
+
+# mdBook build directory
+book/

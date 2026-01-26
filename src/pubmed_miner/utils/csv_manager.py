@@ -177,21 +177,85 @@ class CSVManager:
         return row
 
     @staticmethod
+    def upsert_papers(
+        papers: List[Paper],
+        filepath: str,
+        include_scoring: bool = False
+    ) -> None:
+        """Update or insert papers into the CSV file.
+        
+        If a paper with the same PMID exists, it is updated (overwritten).
+        If it does not exist, it is added.
+        
+        Args:
+            papers: List of Paper or ScoredPaper objects to upsert
+            filepath: Path to the CSV file
+            include_scoring: If True, include scoring information
+        """
+        if not papers:
+            logger.warning("No papers provided for upsert.")
+            return
+
+        filepath = Path(filepath)
+        
+        # Dictionary to hold all papers: {pmid: paper_dict}
+        all_papers_map = {}
+
+        # 1. Load existing papers if file exists
+        if filepath.exists():
+            try:
+                existing_rows = CSVManager.load_papers(str(filepath))
+                for row in existing_rows:
+                    pmid = row.get("pmid")
+                    if pmid:
+                        all_papers_map[pmid] = row
+            except Exception as e:
+                logger.warning(f"Could not load existing papers for upsert: {e}. Starting fresh.")
+
+        # 2. Update with new papers
+        for paper in papers:
+            paper_dict = CSVManager._paper_to_dict(paper, include_scoring)
+            pmid = paper_dict.get("pmid")
+            if pmid:
+                all_papers_map[pmid] = paper_dict
+        
+        # 3. Convert back to list and save (overwrite file)
+        # We need to reconstruct ScoredPaper/Paper objects or just write dicts directly?
+        # save_papers takes List[Paper]. But here we have dicts.
+        # We can write dicts directly if we use DictWriter, which save_papers does but it expects objects.
+        
+        # Let's create a specialized internal writer or modify save_papers to accept dicts?
+        # Or just write it here to avoid object reconstruction overhead.
+        
+        headers = CSVManager.SCORED_HEADERS if include_scoring else CSVManager.HEADERS
+        
+        try:
+            with open(filepath, mode="w", newline="", encoding="utf-8") as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=headers)
+                writer.writeheader()
+                
+                for pmid, row in all_papers_map.items():
+                    # Ensure row has all headers
+                    safe_row = {k: row.get(k, "") for k in headers}
+                    writer.writerow(safe_row)
+                    
+            logger.info(f"Successfully upserted papers to {filepath}. Total count: {len(all_papers_map)}")
+            
+        except IOError as e:
+            logger.error(f"Error writing to CSV file {filepath}: {e}")
+            raise IOError(f"Failed to save papers to CSV: {e}")
+
+    @staticmethod
     def append_papers(papers: List[Paper], filepath: str) -> None:
-        """Append papers to an existing CSV file.
+        """Append papers to an existing CSV file (Upsert mode).
+
+        This now uses upsert semantics: if a paper exists, it updates it.
 
         Args:
             papers: List of Paper objects to append
             filepath: Path to the CSV file
-
-        Raises:
-            ValueError: If papers list is empty
-            IOError: If file operation fails
         """
-        if not papers:
-            raise ValueError("Papers list cannot be empty")
-
-        CSVManager.save_papers(papers, filepath, append=True)
+        CSVManager.upsert_papers(papers, filepath, include_scoring=False)
 
     @staticmethod
     def update_collection(
@@ -203,4 +267,4 @@ class CSVManager:
             papers: List of ScoredPaper objects
             filepath: Path to the CSV file
         """
-        CSVManager.save_papers(papers, filepath, include_scoring=True)
+        CSVManager.upsert_papers(papers, filepath, include_scoring=True)
