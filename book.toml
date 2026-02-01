@@ -1,8 +1,8 @@
 [book]
-authors = ["PubMed Miner"]
-language = "en"
+authors = ["Taeyoon Kim"]
+language = "ko"
 src = "book_src"
-title = "Daily Essential Papers"
+title = "Daily Papers Search"
 
 [output.html]
 additional-css = ["book_src/custom.css"]
