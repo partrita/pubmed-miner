@@ -1,3 +1,0 @@
-[console_scripts]
-collect-papers = automated_collection:main
-pubmed-miner = pubmed_miner.core:main
