@@ -26,3 +26,5 @@
     - [2026-02-03: de-novo-protein-design](2026/02/03_de-novo-protein-design.md)
     - [2026-02-04: ai-drug-discovery](2026/02/04_ai-drug-discovery.md)
     - [2026-02-04: de-novo-protein-design](2026/02/04_de-novo-protein-design.md)
+    - [2026-02-05: ai-drug-discovery](2026/02/05_ai-drug-discovery.md)
+    - [2026-02-05: de-novo-protein-design](2026/02/05_de-novo-protein-design.md)
