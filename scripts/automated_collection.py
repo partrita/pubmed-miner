@@ -280,13 +280,13 @@ class AutomatedCollectionOrchestrator:
 
             # Step 6: Create MdBook page
             if essential_papers:
-                relative_path = self.mdbook_manager.create_daily_page(
+                relative_path = self.mdbook_manager.update_monthly_page(
                     topic.name, essential_papers
                 )
                 self.mdbook_manager.update_summary(relative_path, topic.name)
                 
                 result["page_created"] = True
-                self.logger.info(f"Created mdbook page for topic: {topic.name}")
+                self.logger.info(f"Updated mdbook monthly page for topic: {topic.name}")
 
                 # Update change tracking
                 self.change_tracker.save_paper_snapshot(topic.name, essential_papers)

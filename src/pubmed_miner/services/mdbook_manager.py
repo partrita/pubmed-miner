@@ -63,41 +63,101 @@ class MdBookManager:
         # Return relative path for SUMMARY.md
         return f"{year}/{month}/{filename}"
 
+    def update_monthly_page(self, topic: str, papers: List[ScoredPaper], date: datetime = None) -> str:
+        """Update a monthly markdown page with new papers in a table format.
+
+        Args:
+            topic: Topic name
+            papers: List of essential papers
+            date: Optional date to use for year/month. Defaults to current date.
+
+        Returns:
+            Path to the monthly file relative to book_src/
+        """
+        current_date = date or datetime.now()
+        year = current_date.strftime("%Y")
+        month = current_date.strftime("%m")
+        month_name = current_date.strftime("%B")
+        
+        # Monthly file: book_src/year/month.md (e.g., book_src/2026/02.md)
+        monthly_dir = self.src_dir / year
+        monthly_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{month}.md"
+        file_path = monthly_dir / filename
+        
+        # 1. Read existing PMIDs to avoid duplicates
+        import re
+        existing_pmids = set()
+        if file_path.exists():
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                # Simple PMID extraction from [PMID](https://pubmed.ncbi.nlm.nih.gov/12345/)
+                existing_pmids = set(re.findall(r'pubmed\.ncbi\.nlm\.nih\.gov/(\d+)/', content))
+
+        # 2. Filter out duplicates
+        new_papers = [p for p in papers if str(p.pmid) not in existing_pmids]
+        
+        if not new_papers:
+            logger.info(f"No new papers to add for {topic} in {year}-{month}")
+            return f"{year}/{filename}"
+
+        # 3. Create or Update table
+        if not file_path.exists():
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(f"# {year} {month_name}\n\n")
+                f.write("| 날짜 | 주제 | 제목 | 저널 | 점수 | 링크 |\n")
+                f.write("| :--- | :--- | :--- | :--- | :--- | :--- |\n")
+
+        with open(file_path, "a", encoding="utf-8") as f:
+            # Sort by rank to ensure most important ones are added first if multiple new ones
+            for paper in sorted(new_papers, key=lambda p: p.rank):
+                date_str = current_date.strftime("%Y-%m-%d")
+                pmid_link = f"[PMID](https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/)"
+                doi_link = f", [DOI](https://doi.org/{paper.doi})" if paper.doi else ""
+                
+                # Title might contain | character, which breaks MD table
+                safe_title = paper.title.replace("|", "\\|")
+                
+                f.write(f"| {date_str} | {topic} | {safe_title} | {paper.journal} | {paper.score:.1f} | {pmid_link}{doi_link} |\n")
+
+        logger.info(f"Updated monthly page: {file_path}")
+        return f"{year}/{filename}"
+
     def update_summary(self, relative_path: str, topic: str):
-        """Update SUMMARY.md to include the new page.
+        """Update SUMMARY.md to include the page.
         
         Args:
-            relative_path: Path to the new page relative to book_src/
+            relative_path: Path to the page relative to book_src/
             topic: Topic name
         """
-        current_date = datetime.now()
-        date_str = current_date.strftime("%Y-%m-%d")
-        link_text = f"{date_str}: {topic}"
+        # We want to use monthly pages now
+        is_monthly = relative_path.count('/') == 1 and relative_path.endswith('.md')
+        
+        if is_monthly:
+            # Extract month from relative_path (e.g., "2026/02.md")
+            parts = relative_path.split('/')
+            year = parts[0]
+            month_num = parts[1].replace('.md', '')
+            try:
+                dt = datetime.strptime(f"{year}-{month_num}-01", "%Y-%m-%d")
+                month_name = dt.strftime("%B")
+                link_text = f"{month_name} {year}"
+            except ValueError:
+                link_text = f"Month {month_num} {year}"
+        else:
+            current_date = datetime.now()
+            date_str = current_date.strftime("%Y-%m-%d")
+            link_text = f"{date_str}: {topic}"
+            
         new_entry = f"    - [{link_text}]({relative_path})\n"
         
-        # Check if year section exists, if not add it
-        year_section = f"- [{current_date.year}]()" # Dummy link or just text
-        
-        # Simple appending strategy for now. 
-        # Ideally, we'd want to insert it in the correct chronological order.
-        # Let's read existing content first.
-        
         if not self.summary_path.exists():
-            with open(self.summary_path, "w") as f:
-                f.write("# 요약\n\n- [소개](README.md)\n\n# 일일 업데이트\n")
+            with open(self.summary_path, "w", encoding="utf-8") as f:
+                f.write("# 요약\n\n- [소개](README.md)\n\n# 업데이트\n")
 
-        with open(self.summary_path, "r") as f:
+        with open(self.summary_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
-        # We want to add the new entry under "Daily Updates"
-        # Let's structure it by Year -> Month -> Day/Topic
-        
-        # However, to keep it simple and requested "daily page addition":
-        # We will append to the end, or insert at top of a list.
-        # Let's try to group by Year/Month if possible, or just a flat list under "Daily Updates".
-        
-        # Let's just append for now, but formatted nicely.
-        
         # Check if the entry already exists
         if any(relative_path in line for line in lines):
             logger.info(f"Entry for {relative_path} already exists in SUMMARY.md")
@@ -105,40 +165,20 @@ class MdBookManager:
 
         # Prepare year/month headers
         year_header = f"- [{current_date.year}]()"
-        month_name = current_date.strftime("%B")
-        month_header = f"  - [{month_name}]()"
-        
-        # We need to construct the file content carefully.
-        # This is a simple parser/updater.
-        
-        new_lines = []
-        in_daily_updates = False
-        year_found = False
-        month_found = False
-        
-        # We will reconstruct the file.
-        # This is complex to do robustly with just appending.
-        # Let's just append to the end for simplicity, user can reorganize if needed.
-        # Or better: simple text search.
         
         content = "".join(lines)
         
-        # Ensure we have the headers
+        # For monthly pages, we don't want topic-level nesting if possible, 
+        # but let's stick to the structure.
+        
         if year_header not in content:
-            # Append Year header
-            with open(self.summary_path, "a") as f:
+            with open(self.summary_path, "a", encoding="utf-8") as f:
                 f.write(f"\n{year_header}\n")
-                f.write(f"{month_header}\n")
-                f.write(f"    - [{link_text}]({relative_path})\n")
-        elif month_header not in content:
-            # Year exists, but month doesn't (simplified check)
-             with open(self.summary_path, "a") as f:
-                f.write(f"{month_header}\n")
-                f.write(f"    - [{link_text}]({relative_path})\n")
+                f.write(f"{new_entry}")
         else:
-            # Both exist, just append item
-             with open(self.summary_path, "a") as f:
-                f.write(f"    - [{link_text}]({relative_path})\n")
+            # Simple append is safer for now given the current logic
+            with open(self.summary_path, "a", encoding="utf-8") as f:
+                f.write(f"{new_entry}")
 
         logger.info("Updated SUMMARY.md")
 

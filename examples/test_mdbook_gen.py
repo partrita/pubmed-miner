@@ -80,13 +80,13 @@ def test_mdbook_generation():
     papers = create_sample_papers()
     print(f"📄 Sample Papers Created: {len(papers)}")
     
-    # Test creating daily page
-    print("🚀 Testing Daily Page Creation...")
+    # Test creating monthly page
+    print("🚀 Testing Monthly Page Creation...")
     try:
         topic = "Biomedical Research"
-        relative_path = mdbook_manager.create_daily_page(topic, papers)
+        relative_path = mdbook_manager.update_monthly_page(topic, papers)
 
-        print("✅ Success! Page Created:")
+        print("✅ Success! Page Updated/Created:")
         print(f"   Path: {relative_path}")
         
         full_path = mdbook_manager.src_dir / relative_path
