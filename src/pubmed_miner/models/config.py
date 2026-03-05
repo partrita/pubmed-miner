@@ -34,7 +34,7 @@ class TopicConfig:
 class GitHubConfig:
     """GitHub integration configuration."""
 
-    token: str
+    token: str = field(repr=False)
     repository: str
     issue_labels: List[str] = field(
         default_factory=lambda: ["essential-papers", "automated"]
@@ -45,6 +45,8 @@ class GitHubConfig:
         # Allow empty token for local testing (will use mock mode)
         if not self.token:
             self.token = "mock_token_for_local_testing"
+        if self.token == "":
+            raise ValueError("GitHub token cannot be empty")
         if not self.repository:
             raise ValueError("Repository cannot be empty")
         if "/" not in self.repository:
