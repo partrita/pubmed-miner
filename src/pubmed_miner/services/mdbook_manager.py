@@ -123,16 +123,17 @@ class MdBookManager:
         logger.info(f"Updated monthly page: {file_path}")
         return f"{year}/{filename}"
 
-    def update_summary(self, relative_path: str, topic: str):
-        """Update SUMMARY.md to include the page.
-        
+    def update_summary(self, relative_path: str, topic: str) -> None:
+        """Update SUMMARY.md with a link to the new page.
+
         Args:
             relative_path: Path to the page relative to book_src/
             topic: Topic name
         """
+        current_date = datetime.now()
         # We want to use monthly pages now
         is_monthly = relative_path.count('/') == 1 and relative_path.endswith('.md')
-        
+
         if is_monthly:
             # Extract month from relative_path (e.g., "2026/02.md")
             parts = relative_path.split('/')
@@ -140,14 +141,15 @@ class MdBookManager:
             month_num = parts[1].replace('.md', '')
             try:
                 dt = datetime.strptime(f"{year}-{month_num}-01", "%Y-%m-%d")
+                current_date = dt
                 month_name = dt.strftime("%B")
                 link_text = f"{month_name} {year}"
             except ValueError:
                 link_text = f"Month {month_num} {year}"
         else:
-            current_date = datetime.now()
             date_str = current_date.strftime("%Y-%m-%d")
             link_text = f"{date_str}: {topic}"
+
             
         new_entry = f"    - [{link_text}]({relative_path})\n"
         

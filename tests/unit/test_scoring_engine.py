@@ -299,20 +299,33 @@ class TestScoringEngine:
 
     def test_get_score_breakdown(self):
         """Test score breakdown functionality."""
-        scored_paper = ScoredPaper(
+        paper = Paper(
             pmid="12345",
             title="Test Paper",
             authors=["Author"],
             journal="Test Journal",
             publication_date=datetime(2023, 1, 1),
-            citation_count=100,
-            impact_factor=10.0,
-            score=75.0,
+        )
+
+        citation_count = 100
+        impact_factor = 10.0
+
+        # Calculate expected score using the engine
+        score = self.engine.calculate_paper_score(paper, citation_count, impact_factor)
+
+        scored_paper = ScoredPaper(
+            pmid=paper.pmid,
+            title=paper.title,
+            authors=paper.authors,
+            journal=paper.journal,
+            publication_date=paper.publication_date,
+            citation_count=citation_count,
+            impact_factor=impact_factor,
+            score=score,
             rank=1,
         )
 
-        breakdown = self.engine.get_score_breakdown(scored_paper, "test query")
-
+        breakdown = self.engine.get_score_breakdown(scored_paper, None)
         # Check all components are present
         required_keys = [
             "citation_score",

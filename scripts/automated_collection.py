@@ -344,6 +344,9 @@ class AutomatedCollectionOrchestrator:
 
 def main():
     """Main entry point for the automated collection script."""
+    # Get current date for reporting
+    current_date = datetime.now().date()
+    
     try:
         # Initialize and run orchestrator
         orchestrator = AutomatedCollectionOrchestrator()
@@ -351,14 +354,14 @@ def main():
 
         # Exit with appropriate code
         if results["success"]:
-            print("Automated collection completed successfully")
+            print(f"{current_date}: Automated collection completed successfully")
             sys.exit(0)
         else:
-            print("Automated collection completed with errors")
+            print(f"{current_date}: Automated collection completed with errors")
             sys.exit(1)
 
     except Exception as e:
-        print(f"Critical error: {e}")
+        print(f"{current_date}: Critical error: {e}")
         traceback.print_exc()
         sys.exit(1)
 
