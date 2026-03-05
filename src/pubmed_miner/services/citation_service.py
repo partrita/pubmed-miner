@@ -2,6 +2,8 @@
 Citation information collection service.
 """
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import requests
 import time
 import logging
@@ -28,6 +30,7 @@ class CitationService:
 
         # Rate limits (requests per second)
         self.rate_limits = {"crossref": 50, "semantic_scholar": 100, "pmc": 3}
+        self._lock = threading.Lock()
 
         logger.info("Initialized CitationService")
 
@@ -108,18 +111,26 @@ class CitationService:
         if not uncached_pmids:
             return citations
 
-        logger.info(f"Fetching citations for {len(uncached_pmids)} uncached PMIDs")
+        logger.info(f"Fetching citations for {len(uncached_pmids)} uncached PMIDs in parallel")
 
-        # Process in batches to respect rate limits
-        batch_size = 10
-        for i in range(0, len(uncached_pmids), batch_size):
-            batch = uncached_pmids[i : i + batch_size]
-            batch_citations = self._fetch_citation_batch(batch, skip_errors=skip_errors)
-            citations.update(batch_citations)
+        # Use ThreadPoolExecutor for parallel fetching
+        max_workers = min(len(uncached_pmids), 10)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Map PMIDs to the single get_citation_count method
+            future_to_pmid = {executor.submit(self.get_citation_count, pmid): pmid for pmid in uncached_pmids}
 
-            # Rate limiting between batches
-            if i + batch_size < len(uncached_pmids):
-                time.sleep(0.5)
+            for future in future_to_pmid:
+                pmid = future_to_pmid[future]
+                try:
+                    count = future.result()
+                    if count is not None:
+                        citations[pmid] = self._safe_citation_count(count)
+                    elif not skip_errors:
+                        citations[pmid] = 0
+                except Exception as e:
+                    logger.warning(f"Parallel fetch failed for {pmid}: {e}")
+                    if not skip_errors:
+                        citations[pmid] = 0
 
         logger.info(f"Retrieved citations for {len(citations)} PMIDs")
         return citations
@@ -341,24 +352,25 @@ class CitationService:
             logger.warning(f"Error caching citation for {pmid}: {e}")
 
     def _rate_limit(self, service: str) -> None:
-        """Apply rate limiting for a service.
-
-        Args:
-            service: Service name ('crossref', 'semantic_scholar', 'pmc')
+        """Apply rate limiting for a service with thread safety.
+        Reserves a time slot for the request.
         """
         if service not in self.rate_limits:
             return
 
-        current_time = time.time()
-        last_request = self.last_request_times.get(service, 0)
-        min_interval = 1.0 / self.rate_limits[service]
+        with self._lock:
+            min_interval = 1.0 / self.rate_limits[service]
+            current_time = time.time()
+            last_request = self.last_request_times.get(service, 0)
 
-        time_since_last = current_time - last_request
-        if time_since_last < min_interval:
-            sleep_time = min_interval - time_since_last
+            # Calculate when this request is allowed to run
+            wait_until = max(current_time, last_request + min_interval)
+            self.last_request_times[service] = wait_until
+
+            sleep_time = wait_until - current_time
+
+        if sleep_time > 0:
             time.sleep(sleep_time)
-
-        self.last_request_times[service] = time.time()
 
     def update_citation_cache(self, pmid: str, count: int) -> None:
         """Update citation count in cache.
