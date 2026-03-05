@@ -112,13 +112,13 @@ class MdBookManager:
             # Sort by rank to ensure most important ones are added first if multiple new ones
             for paper in sorted(new_papers, key=lambda p: p.rank):
                 date_str = current_date.strftime("%Y-%m-%d")
-                pmid_link = f"[PMID](https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/)"
-                doi_link = f", [DOI](https://doi.org/{paper.doi})" if paper.doi else ""
+                pmid_link = f'<a href="https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/" aria-label="View paper {paper.pmid} on PubMed">PMID</a>'
+                doi_link = f', <a href="https://doi.org/{paper.doi}" aria-label="View DOI {paper.doi}">DOI</a>' if paper.doi else ""
                 
                 # Title might contain | character, which breaks MD table
                 safe_title = paper.title.replace("|", "\\|")
                 
-                f.write(f"| {date_str} | {topic} | {safe_title} | {paper.journal} | {paper.score:.1f} | {pmid_link}{doi_link} |\n")
+                f.write(f"| {date_str} | {topic} | {safe_title} | {paper.journal} | <span class='score-badge' title='Comprehensive score based on citations, journal impact factor, recency, and relevance'>{paper.score:.1f}</span> | {pmid_link}{doi_link} |\n")
 
         logger.info(f"Updated monthly page: {file_path}")
         return f"{year}/{filename}"
