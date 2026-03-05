@@ -20,3 +20,32 @@
 .paper-abstract {
     margin-top: 1em;
 }
+
+/* UX Enhancements */
+table tr:hover {
+    background-color: #f6f8fa;
+    transition: background-color 0.1s ease;
+}
+
+table th {
+    background-color: #f6f8fa;
+    border-bottom: 2px solid #dfe2e5;
+    padding: 12px 8px;
+    text-align: left;
+}
+
+.score-badge {
+    background-color: #dafbe1;
+    color: #1a7f37;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-weight: 600;
+    font-size: 0.9em;
+    display: inline-block;
+    white-space: nowrap;
+    border: 1px solid rgba(26, 127, 55, 0.2);
+}
+
+a {
+    transition: color 0.2s ease-in-out, opacity 0.2s ease-in-out;
+}

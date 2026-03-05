@@ -43,7 +43,7 @@ class GitHubConfig:
     def __post_init__(self):
         """Validate GitHub configuration."""
         # Allow empty token for local testing (will use mock mode)
-        if self.token is None:
+        if not self.token:
             self.token = "mock_token_for_local_testing"
         if not self.repository:
             raise ValueError("Repository cannot be empty")
