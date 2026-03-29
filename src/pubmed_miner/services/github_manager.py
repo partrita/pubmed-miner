@@ -101,7 +101,7 @@ class GitHubIssuesManager:
             url = f"{self.base_url}/search/issues"
             params = {"q": search_query}
 
-            response = requests.get(url, headers=self.headers, params=params)
+            response = requests.get(url, headers=self.headers, params=params, timeout=10)
             response.raise_for_status()
 
             data = response.json()
@@ -141,7 +141,7 @@ class GitHubIssuesManager:
             url = f"{self.base_url}/search/issues"
             params = {"q": search_query}
 
-            response = requests.get(url, headers=self.headers, params=params)
+            response = requests.get(url, headers=self.headers, params=params, timeout=10)
             response.raise_for_status()
 
             data = response.json()
@@ -262,7 +262,7 @@ class GitHubIssuesManager:
 
         try:
             response = requests.post(
-                url, headers=self.headers, data=json.dumps(issue_data)
+                url, headers=self.headers, data=json.dumps(issue_data), timeout=10
             )
             response.raise_for_status()
 
@@ -299,7 +299,7 @@ class GitHubIssuesManager:
 
         try:
             response = requests.patch(
-                url, headers=self.headers, data=json.dumps(update_data)
+                url, headers=self.headers, data=json.dumps(update_data), timeout=10
             )
             response.raise_for_status()
 
@@ -357,7 +357,7 @@ class GitHubIssuesManager:
 
         try:
             response = requests.post(
-                url, headers=self.headers, data=json.dumps(comment_data)
+                url, headers=self.headers, data=json.dumps(comment_data), timeout=10
             )
             response.raise_for_status()
 
@@ -406,7 +406,7 @@ class GitHubIssuesManager:
 
         try:
             response = requests.patch(
-                url, headers=self.headers, data=json.dumps(update_data)
+                url, headers=self.headers, data=json.dumps(update_data), timeout=10
             )
             response.raise_for_status()
 
@@ -429,7 +429,7 @@ class GitHubIssuesManager:
         url = f"{self.base_url}/repos/{self.config.repository}"
 
         try:
-            response = requests.get(url, headers=self.headers)
+            response = requests.get(url, headers=self.headers, timeout=10)
             response.raise_for_status()
 
             repo_info = response.json()
@@ -454,7 +454,7 @@ class GitHubIssuesManager:
             url = f"{self.base_url}/search/issues"
             params = {"q": search_query, "sort": "updated", "order": "desc"}
 
-            response = requests.get(url, headers=self.headers, params=params)
+            response = requests.get(url, headers=self.headers, params=params, timeout=10)
             response.raise_for_status()
 
             data = response.json()
@@ -506,7 +506,7 @@ class GitHubIssuesManager:
         """
         try:
             url = f"{self.base_url}/rate_limit"
-            response = requests.get(url, headers=self.headers)
+            response = requests.get(url, headers=self.headers, timeout=10)
             response.raise_for_status()
 
             rate_limit_info = response.json()
