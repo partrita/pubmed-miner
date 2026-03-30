@@ -624,12 +624,16 @@ class CacheManager:
         """
         try:
             export_data = {}
+            valid_tables = ["citations", "impact_factors", "paper_metadata"]
 
             with self._get_connection() as conn:
+                if table_name and table_name not in valid_tables:
+                    raise ValueError(f"Invalid table name: {table_name}")
+
                 tables = (
                     [table_name]
                     if table_name
-                    else ["citations", "impact_factors", "paper_metadata"]
+                    else valid_tables
                 )
 
                 for table in tables:
