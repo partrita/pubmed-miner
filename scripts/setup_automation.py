@@ -111,6 +111,7 @@ def test_github_access():
         response = requests.get(
             f"https://api.github.com/repos/{github_config.repository}",
             headers=github_manager.headers,
+            timeout=10,
         )
 
         if response.status_code == 200:
