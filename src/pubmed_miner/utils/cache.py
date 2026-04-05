@@ -637,6 +637,8 @@ class CacheManager:
                 )
 
                 for table in tables:
+                    if table not in valid_tables:
+                        raise ValueError(f"Invalid table name: {table}")
                     cursor = conn.execute(f"SELECT * FROM {table}")
                     rows = cursor.fetchall()
                     export_data[table] = [dict(row) for row in rows]
