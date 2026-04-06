@@ -174,6 +174,12 @@ class CSVManager:
                 }
             )
 
+        # Sanitize string fields to prevent CSV Injection (Formula Injection)
+        for key, value in row.items():
+            if isinstance(value, str) and value:
+                if value[0] in ('=', '+', '-', '@'):
+                    row[key] = f"'{value}"
+
         return row
 
     @staticmethod
