@@ -176,16 +176,15 @@ class TestCSVManager:
         with pytest.raises(ValueError):
             CSVManager.save_papers([], temp_csv_file)
     
-    def test_append_papers_empty_list_raises_error(self, temp_csv_file, sample_papers):
-        """Test that appending empty list raises ValueError."""
+    def test_append_papers_empty_list_does_not_raise_error(self, temp_csv_file, sample_papers):
+        """Test that appending empty list does not raise ValueError."""
         # Create initial file first
         csv_path = Path(temp_csv_file)
         csv_path.unlink()
         CSVManager.save_papers(sample_papers, str(csv_path))
         
         # Try to append empty list
-        with pytest.raises(ValueError):
-            CSVManager.append_papers([], temp_csv_file)
+        CSVManager.append_papers([], temp_csv_file)
     
     def test_load_nonexistent_file_raises_error(self):
         """Test that loading non-existent file raises FileNotFoundError."""

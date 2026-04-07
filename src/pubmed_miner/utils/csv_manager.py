@@ -132,6 +132,13 @@ class CSVManager:
             raise
 
     @staticmethod
+    def _sanitize_csv_value(value: str) -> str:
+        """Sanitize a value to prevent CSV Injection (Formula Injection)."""
+        if isinstance(value, str) and value and value[0] in ('=', '+', '-', '@'):
+            return f"'{value}"
+        return value
+
+    @staticmethod
     def _paper_to_dict(paper: Paper, include_scoring: bool = False) -> Dict:
         """Convert a Paper object to a dictionary for CSV writing.
 
@@ -153,14 +160,14 @@ class CSVManager:
         )
 
         row = {
-            "pmid": paper.pmid,
-            "title": paper.title,
-            "authors": authors_str,
-            "journal": paper.journal,
-            "publication_date": pub_date_str,
-            "doi": paper.doi or "",
-            "abstract": paper.abstract or "",
-            "topic": paper.topic or "",
+            "pmid": CSVManager._sanitize_csv_value(paper.pmid),
+            "title": CSVManager._sanitize_csv_value(paper.title),
+            "authors": CSVManager._sanitize_csv_value(authors_str),
+            "journal": CSVManager._sanitize_csv_value(paper.journal),
+            "publication_date": CSVManager._sanitize_csv_value(pub_date_str),
+            "doi": CSVManager._sanitize_csv_value(paper.doi or ""),
+            "abstract": CSVManager._sanitize_csv_value(paper.abstract or ""),
+            "topic": CSVManager._sanitize_csv_value(paper.topic or ""),
         }
 
         # Add scoring information if available and requested
@@ -191,6 +198,7 @@ class CSVManager:
             papers: List of Paper or ScoredPaper objects to upsert
             filepath: Path to the CSV file
             include_scoring: If True, include scoring information
+
         """
         if not papers:
             logger.warning("No papers provided for upsert.")

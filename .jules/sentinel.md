@@ -12,3 +12,8 @@
 **Vulnerability:** The `CacheManager.export_cache_data` function allowed SQL injection by directly formatting user-provided table names (`table_name`) into a raw SQL query string (`f"SELECT * FROM {table}"`) without validation.
 **Learning:** Even utility or internal-facing functions can be exposed to untrusted input. When parameterized queries cannot be used for table names, strict validation against a predefined allowlist is necessary.
 **Prevention:** Validate input strings against an explicit list of allowed names (e.g., `["citations", "impact_factors", "paper_metadata"]`) before interpolating them into SQL queries.
+
+## 2026-03-31 - [CSV Injection (Formula Injection) in Data Exports]
+**Vulnerability:** The application was writing user-provided data directly to CSV files without sanitizing fields starting with formula characters (`=`, `+`, `-`, `@`). This could result in Formula Injection when the CSV is opened in spreadsheet programs like Excel or Google Sheets, potentially executing malicious macros or leaking data.
+**Learning:** Exporting raw database or API data directly into CSVs is dangerous because standard CSV writers do not guard against formula evaluation triggers in common spreadsheet software.
+**Prevention:** Always sanitize string fields by prepending a single quote (`'`) to any string that begins with `=`, `+`, `-`, or `@` prior to passing the values to a CSV writer.
