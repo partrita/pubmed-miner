@@ -24,3 +24,23 @@ def test_paper_to_dict_sanitizes_csv_injection():
     assert result["doi"] == "'@doi123"
     assert result["abstract"] == "Normal abstract"
     assert result["topic"] == "test-topic"
+
+def test_paper_to_dict_sanitizes_csv_injection_with_leading_whitespace():
+    """Verify that _paper_to_dict sanitizes payloads with leading whitespace."""
+    paper = Paper(
+        pmid="12346",
+        title="  =cmd|' /C calc'!A0",  # CSV injection payload with leading space
+        authors=["\t+Author One"],      # CSV injection payload with leading tab
+        journal=" \n -Malicious Journal", # CSV injection payload with leading newline
+        publication_date=datetime(2024, 1, 1),
+        doi="   @doi123",                # CSV injection payload
+        abstract="Normal abstract",
+        topic="test-topic"
+    )
+
+    result = CSVManager._paper_to_dict(paper)
+
+    assert result["title"] == "'  =cmd|' /C calc'!A0"
+    assert result["authors"] == "'\t+Author One"
+    assert result["journal"] == "' \n -Malicious Journal"
+    assert result["doi"] == "'   @doi123"

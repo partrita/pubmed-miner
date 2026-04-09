@@ -12,3 +12,8 @@
 **Vulnerability:** The `CacheManager.export_cache_data` function allowed SQL injection by directly formatting user-provided table names (`table_name`) into a raw SQL query string (`f"SELECT * FROM {table}"`) without validation.
 **Learning:** Even utility or internal-facing functions can be exposed to untrusted input. When parameterized queries cannot be used for table names, strict validation against a predefined allowlist is necessary.
 **Prevention:** Validate input strings against an explicit list of allowed names (e.g., `["citations", "impact_factors", "paper_metadata"]`) before interpolating them into SQL queries.
+
+## 2026-04-08 - [CSV Injection (Formula Injection) Bypass]
+**Vulnerability:** The existing CSV injection protection checked if the first character of a string field was a formula trigger (`=`, `+`, `-`, `@`). However, this check could be bypassed if the malicious payload started with whitespace characters (e.g., space or tab) because Excel still executes formulas with leading spaces.
+**Learning:** Basic character matching for CSV injection is insufficient if it doesn't account for how spreadsheet applications parse the input. Leading whitespace must be stripped before evaluating whether a payload starts with an executable formula character.
+**Prevention:** Always use `.lstrip()` on string values before checking if the first character is a known trigger character (e.g., `stripped_value and stripped_value[0] in ('=', '+', '-', '@')`).
