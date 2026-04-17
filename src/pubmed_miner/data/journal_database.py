@@ -526,6 +526,15 @@ class JournalDatabase:
             for journal_name, journal_info in self.journals.items():
                 row = {"name": journal_name}
                 row.update(journal_info)
+
+                # Sanitize string fields to prevent CSV Injection (Formula Injection)
+                row = {
+                    key: f"'{value}"
+                    if isinstance(value, str) and value.lstrip().startswith(('=', '+', '-', '@'))
+                    else value
+                    for key, value in row.items()
+                }
+
                 writer.writerow(row)
 
         logger.info(f"Exported {len(self.journals)} journals to {filepath}")
