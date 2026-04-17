@@ -528,11 +528,12 @@ class JournalDatabase:
                 row.update(journal_info)
 
                 # Sanitize string fields to prevent CSV Injection (Formula Injection)
-                for key, value in row.items():
-                    if isinstance(value, str) and value:
-                        stripped_value = value.lstrip()
-                        if stripped_value and stripped_value[0] in ('=', '+', '-', '@'):
-                            row[key] = f"'{value}"
+                row = {
+                    key: f"'{value}"
+                    if isinstance(value, str) and value.lstrip().startswith(('=', '+', '-', '@'))
+                    else value
+                    for key, value in row.items()
+                }
 
                 writer.writerow(row)
 
