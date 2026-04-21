@@ -4,6 +4,7 @@ MdBook management service.
 
 import logging
 import os
+import html
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
@@ -218,13 +219,13 @@ class MdBookManager:
             # We'll use the custom CSS classes we defined
             
             lines.append(f'<div class="paper-entry">')
-            lines.append(f'<div class="paper-title">{paper.rank}. {paper.title}</div>')
+            lines.append(f'<div class="paper-title">{paper.rank}. {html.escape(paper.title)}</div>')
             
             # Authors and Journal info
-            authors = ', '.join(paper.authors)
+            authors = ', '.join(html.escape(a) for a in paper.authors)
             lines.append(f'<div class="paper-meta">')
             lines.append(f"저자: {authors}<br>")
-            lines.append(f"저널: {paper.journal}")
+            lines.append(f"저널: {html.escape(paper.journal)}")
             lines.append('</div>')
             lines.append("")
             
@@ -240,7 +241,7 @@ class MdBookManager:
             if paper.abstract:
                 lines.append(f'<div class="paper-abstract">')
                 lines.append(f"<details><summary>초록</summary>")
-                lines.append(f"<p>{paper.abstract}</p>")
+                lines.append(f"<p>{html.escape(paper.abstract)}</p>")
                 lines.append(f"</details>")
                 lines.append('</div>')
 
