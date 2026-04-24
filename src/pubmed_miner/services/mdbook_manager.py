@@ -113,13 +113,20 @@ class MdBookManager:
             # Sort by rank to ensure most important ones are added first if multiple new ones
             for paper in sorted(new_papers, key=lambda p: p.rank):
                 date_str = current_date.strftime("%Y-%m-%d")
-                pmid_link = f'<a href="https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/" aria-label="View paper {paper.pmid} on PubMed">PMID</a>'
-                doi_link = f', <a href="https://doi.org/{paper.doi}" aria-label="View DOI {paper.doi}">DOI</a>' if paper.doi else ""
+
+                # Sanitize fields against XSS
+                safe_pmid = html.escape(str(paper.pmid))
+                safe_doi = html.escape(str(paper.doi)) if paper.doi else ""
+                safe_topic = html.escape(str(topic))
+                safe_journal = html.escape(str(paper.journal))
+
+                pmid_link = f'<a href="https://pubmed.ncbi.nlm.nih.gov/{safe_pmid}/" aria-label="View paper {safe_pmid} on PubMed">PMID</a>'
+                doi_link = f', <a href="https://doi.org/{safe_doi}" aria-label="View DOI {safe_doi}">DOI</a>' if paper.doi else ""
                 
                 # Title might contain | character, which breaks MD table
-                safe_title = paper.title.replace("|", "\\|")
+                safe_title = html.escape(str(paper.title)).replace("|", "\\|")
                 
-                f.write(f"| {date_str} | {topic} | {safe_title} | {paper.journal} | <span class='score-badge' title='Comprehensive score based on citations, journal impact factor, recency, and relevance'>{paper.score:.1f}</span> | {pmid_link}{doi_link} |\n")
+                f.write(f"| {date_str} | {safe_topic} | {safe_title} | {safe_journal} | <span class='score-badge' title='Comprehensive score based on citations, journal impact factor, recency, and relevance'>{paper.score:.1f}</span> | {pmid_link}{doi_link} |\n")
 
         logger.info(f"Updated monthly page: {file_path}")
         return f"{year}/{filename}"

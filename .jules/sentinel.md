@@ -21,3 +21,8 @@
 **Vulnerability:** The `MdBookManager._format_page_content` method concatenated external, potentially untrusted strings from PubMed (such as `paper.title`, `paper.journal`, `paper.abstract` and `paper.authors`) directly into HTML markup (`<div class="paper-title">...</div>`) without escaping them. This exposed the application to Cross-Site Scripting (XSS).
 **Learning:** Any dynamic generation of HTML or Markdown that embeds external string data must consider XSS attacks, even if the data originates from a "trusted" external API like PubMed, because the content can still contain HTML-like syntax or malicious payloads.
 **Prevention:** Always use `html.escape()` or an equivalent context-aware escaping mechanism on external text fields before embedding them into HTML content.
+
+## 2026-04-24 - [XSS Vulnerability in MdBookManager table generation]
+**Vulnerability:** The `MdBookManager.update_monthly_page` method concatenated external, potentially untrusted strings from PubMed (such as `paper.title`, `paper.journal`, `paper.pmid` and `paper.doi`) directly into HTML markup (`<a href="...">...</a>`) without escaping them. This exposed the application to Cross-Site Scripting (XSS).
+**Learning:** Any dynamic generation of HTML or Markdown that embeds external string data must consider XSS attacks, even if the data originates from a "trusted" external API like PubMed, because the content can still contain HTML-like syntax or malicious payloads.
+**Prevention:** Always use `html.escape()` or an equivalent context-aware escaping mechanism on external text fields before embedding them into HTML content.
