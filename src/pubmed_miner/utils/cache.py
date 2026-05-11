@@ -816,7 +816,7 @@ def create_cache_key(prefix: str, *args: Any) -> str:
         if isinstance(arg, (dict, list)):
             # Create hash for complex objects
             key_parts.append(
-                hashlib.sha256(json.dumps(arg, sort_keys=True).encode()).hexdigest()[:8]
+                hashlib.sha256(json.dumps(arg, sort_keys=True).encode()).hexdigest()
             )
         else:
             key_parts.append(str(arg))
