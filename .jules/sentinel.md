@@ -26,3 +26,8 @@
 **Vulnerability:** The `MdBookManager.update_monthly_page` method concatenated external, potentially untrusted strings from PubMed (such as `paper.title`, `paper.journal`, `paper.pmid` and `paper.doi`) directly into HTML markup (`<a href="...">...</a>`) without escaping them. This exposed the application to Cross-Site Scripting (XSS).
 **Learning:** Any dynamic generation of HTML or Markdown that embeds external string data must consider XSS attacks, even if the data originates from a "trusted" external API like PubMed, because the content can still contain HTML-like syntax or malicious payloads.
 **Prevention:** Always use `html.escape()` or an equivalent context-aware escaping mechanism on external text fields before embedding them into HTML content.
+
+## 2026-05-11 - [Weak Hashing Algorithm in Cache Generation]
+**Vulnerability:** The cache key generation in `src/pubmed_miner/utils/cache.py` used `hashlib.md5()` which is a weak hash algorithm flagged by security linters (Bandit B324). Additionally, Bandit flagged a potential SQL injection (B608) on `f"SELECT * FROM {table}"` despite an explicit allowlist check.
+**Learning:** Using broken hashing algorithms like MD5 can lead to vulnerabilities or linter errors, even for non-cryptographic purposes like caching. For f-string SQL queries where parameterization isn't possible (e.g. table names) and validation is strictly enforced via an allowlist, linters will still flag it as a false positive unless explicitly suppressed.
+**Prevention:** Use `hashlib.sha256()` instead of `hashlib.md5()`. Explicitly suppress false-positive SQL injection linting errors using `# nosec B608` only after rigorous allowlist validation is implemented.
