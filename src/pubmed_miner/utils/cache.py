@@ -639,7 +639,7 @@ class CacheManager:
                 for table in tables:
                     if table not in valid_tables:
                         raise ValueError(f"Invalid table name: {table}")
-                    cursor = conn.execute(f"SELECT * FROM {table}")
+                    cursor = conn.execute(f"SELECT * FROM {table}")  # nosec B608
                     rows = cursor.fetchall()
                     export_data[table] = [dict(row) for row in rows]
 
@@ -816,7 +816,7 @@ def create_cache_key(prefix: str, *args: Any) -> str:
         if isinstance(arg, (dict, list)):
             # Create hash for complex objects
             key_parts.append(
-                hashlib.md5(json.dumps(arg, sort_keys=True).encode()).hexdigest()[:8]
+                hashlib.sha256(json.dumps(arg, sort_keys=True).encode()).hexdigest()[:8]
             )
         else:
             key_parts.append(str(arg))
