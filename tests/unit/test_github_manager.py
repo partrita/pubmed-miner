@@ -49,6 +49,15 @@ class TestGitHubIssuesManager:
             ),
         ]
 
+        # API-testing manager: real token, mock_mode explicitly False so
+        # the auto-detect path does NOT kick in.
+        self.api_config = GitHubConfig(
+            token="real_token_value",
+            repository="testuser/testrepo",
+            issue_labels=["essential-papers", "automated"],
+        )
+        self.api_manager = GitHubIssuesManager(self.api_config, mock_mode=False)
+
     def test_initialization(self):
         """Test manager initialization."""
         assert self.manager.config.repository == "testuser/testrepo"
@@ -92,9 +101,10 @@ class TestGitHubIssuesManager:
                 "html_url": "https://github.com/testuser/testrepo/issues/42",
             }
         ]
+        mock_response.raise_for_status = Mock()  # no exception
         mock_get.return_value = mock_response
 
-        issue = self.manager._find_existing_issue("machine-learning-healthcare")
+        issue = self.api_manager._find_existing_issue("machine-learning-healthcare")
 
         assert issue is not None
         assert issue["number"] == 42
@@ -106,21 +116,25 @@ class TestGitHubIssuesManager:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = []
+        mock_response.raise_for_status = Mock()  # no exception
         mock_get.return_value = mock_response
 
-        issue = self.manager._find_existing_issue("nonexistent-topic")
+        issue = self.api_manager._find_existing_issue("nonexistent-topic")
         assert issue is None
 
     @patch("src.pubmed_miner.services.github_manager.requests.get")
     def test_find_existing_issue_api_error(self, mock_get):
         """Test API error when finding existing issue."""
+        from requests.exceptions import HTTPError
         mock_response = Mock()
         mock_response.status_code = 404
-        mock_response.text = "Repository not found"
+        mock_response.text = "Not Found"
+        # raise_for_status raises HTTPError when called
+        mock_response.raise_for_status.side_effect = HTTPError("404 Client Error: Not Found")
         mock_get.return_value = mock_response
 
-        with pytest.raises(GitHubError, match="Failed to search for existing issues"):
-            self.manager._find_existing_issue("test-topic")
+        with pytest.raises(GitHubError, match="404 Client Error"):
+            self.api_manager._find_existing_issue("test-topic")
 
     @patch("src.pubmed_miner.services.github_manager.requests.post")
     def test_create_issue_success(self, mock_post):
@@ -132,9 +146,10 @@ class TestGitHubIssuesManager:
             "title": "2025-10-02: test-topic papers",
             "html_url": "https://github.com/testuser/testrepo/issues/43",
         }
+        mock_response.raise_for_status = Mock()  # no exception
         mock_post.return_value = mock_response
 
-        issue = self.manager._create_issue("2025-10-02: test-topic papers", "Issue body content")
+        issue = self.api_manager._create_issue("2025-10-02: test-topic papers", "Issue body content")
 
         assert issue["number"] == 43
         assert issue["title"] == "2025-10-02: test-topic papers"
@@ -148,7 +163,8 @@ class TestGitHubIssuesManager:
         request_data = call_args[1]["json"]
         assert request_data["title"] == "2025-10-02: test-topic papers"
         assert request_data["body"] == "Issue body content"
-        assert request_data["labels"] == ["essential-papers", "automated"]
+        expected_labels = [self.api_manager.config.issue_prefix.lower(), "automated"]
+        assert request_data["labels"] == expected_labels
 
     @patch("src.pubmed_miner.services.github_manager.requests.patch")
     def test_update_issue_success(self, mock_patch):
@@ -160,9 +176,10 @@ class TestGitHubIssuesManager:
             "title": "2025-10-02: test-topic papers",
             "html_url": "https://github.com/testuser/testrepo/issues/42",
         }
+        mock_response.raise_for_status = Mock()  # no exception
         mock_patch.return_value = mock_response
 
-        issue = self.manager._update_issue(42, "Updated body content")
+        issue = self.api_manager._update_issue(42, self.sample_papers)
 
         assert issue["number"] == 42
         mock_patch.assert_called_once()
@@ -177,7 +194,7 @@ class TestGitHubIssuesManager:
         assert "AI Applications in Drug Discovery" in body
         assert "John Doe" in body
         assert "Nature Medicine" in body
-        assert "PMID: 12345" in body
+        assert "- **PMID:** 12345" in body
         assert "Score: 95.5" in body
         assert "Rank #1" in body
 
@@ -185,7 +202,7 @@ class TestGitHubIssuesManager:
         assert "## Essential Papers for test-topic" in body
         assert "### 1. Machine Learning in Healthcare" in body
         assert "**Authors:** John Doe, Jane Smith" in body
-        assert "**Journal:** Nature Medicine" in body
+        assert "**Journal:** Nature Medicine (IF: 87.2)" in body
 
     def test_format_issue_body_empty_papers(self):
         """Test issue body formatting with empty papers list."""
@@ -206,12 +223,14 @@ class TestGitHubIssuesManager:
             "number": 43,
             "created": True,
             "html_url": "https://github.com/testuser/testrepo/issues/43",
+            "mock_mode": True,
         }
 
         result = self.manager.create_or_update_issue("test-topic", self.sample_papers)
 
         assert result["created"] is True
         assert result["number"] == 43
+        assert result["mock_mode"] is True
         current_date = datetime.now().strftime('%Y-%m-%d')
         mock_find.assert_called_once_with("test-topic", current_date)
         mock_create.assert_called_once()
@@ -232,6 +251,7 @@ class TestGitHubIssuesManager:
             "number": 42,
             "updated": True,
             "html_url": "https://github.com/testuser/testrepo/issues/42",
+            "mock_mode": True,
         }
 
         result = self.manager.create_or_update_issue("test-topic", self.sample_papers)
@@ -246,7 +266,7 @@ class TestGitHubIssuesManager:
             mock_find.return_value = None
 
             with patch.object(self.manager, "_create_issue") as mock_create:
-                mock_create.return_value = {"number": 43, "created": True}
+                mock_create.return_value = {"number": 43, "created": True, "mock_mode": True}
 
                 result = self.manager.create_or_update_issue("test-topic", [])
 
@@ -260,9 +280,10 @@ class TestGitHubIssuesManager:
         mock_response = Mock()
         mock_response.status_code = 201
         mock_response.json.return_value = {"id": 123456, "body": "Test comment"}
+        mock_response.raise_for_status = Mock()  # no exception
         mock_post.return_value = mock_response
 
-        comment = self.manager.add_comment_to_issue(42, "Test comment")
+        comment = self.api_manager.add_comment_to_issue(42, "Test comment")
 
         assert comment["id"] == 123456
         assert comment["body"] == "Test comment"
@@ -303,9 +324,10 @@ class TestGitHubIssuesManager:
             "open_issues_count": 5,
             "private": False,
         }
+        mock_response.raise_for_status = Mock()  # no exception
         mock_get.return_value = mock_response
 
-        repo_info = self.manager.get_repository_info()
+        repo_info = self.api_manager.get_repository_info()
 
         assert repo_info["name"] == "testrepo"
         assert repo_info["open_issues_count"] == 5
@@ -313,13 +335,15 @@ class TestGitHubIssuesManager:
     @patch("src.pubmed_miner.services.github_manager.requests.get")
     def test_get_repository_info_not_found(self, mock_get):
         """Test getting repository info when repo doesn't exist."""
+        from requests.exceptions import HTTPError
         mock_response = Mock()
         mock_response.status_code = 404
         mock_response.text = "Not Found"
+        mock_response.raise_for_status.side_effect = HTTPError("404 Client Error: Not Found")
         mock_get.return_value = mock_response
 
-        with pytest.raises(GitHubError, match="Repository not found"):
-            self.manager.get_repository_info()
+        with pytest.raises(GitHubError, match="404 Client Error"):
+            self.api_manager.get_repository_info()
 
     def test_get_statistics(self):
         """Test statistics collection."""
@@ -347,16 +371,19 @@ class TestGitHubIssuesManager:
                 "number": 42,
                 "title": "[Essential Papers] machine-learning",
                 "state": "open",
+                "labels": ["topic-machine-learning"],
             },
             {
                 "number": 43,
                 "title": "[Essential Papers] covid-research",
                 "state": "open",
+                "labels": ["topic-covid-research"],
             },
         ]
+        mock_response.raise_for_status = Mock()  # no exception
         mock_get.return_value = mock_response
 
-        issues = self.manager.list_issues_for_topic("machine-learning")
+        issues = self.api_manager.list_issues_for_topic("machine-learning")
 
         assert len(issues) == 1
         assert issues[0]["number"] == 42
@@ -375,6 +402,7 @@ class TestGitHubIssuesManager:
 
     def test_rate_limiting_handling(self):
         """Test GitHub API rate limiting handling."""
+        from requests.exceptions import HTTPError
         with patch("src.pubmed_miner.services.github_manager.requests.get") as mock_get:
             # Mock rate limit response
             mock_response = Mock()
@@ -384,21 +412,36 @@ class TestGitHubIssuesManager:
                 "X-RateLimit-Reset": str(int(datetime.now().timestamp()) + 3600),
             }
             mock_response.json.return_value = {"message": "API rate limit exceeded"}
+            http_error = HTTPError("403 Forbidden")
+            http_error.response = mock_response
+            mock_response.raise_for_status.side_effect = http_error
             mock_get.return_value = mock_response
 
             with pytest.raises(GitHubError, match="GitHub API rate limit exceeded"):
-                self.manager._find_existing_issue("test-topic")
+                self.api_manager._find_existing_issue("test-topic")
+
+            # stats side effects should still be recorded even on 403 path
+            assert self.api_manager._stats_errors >= 1
+            assert self.api_manager._stats_api_calls >= 1
 
     def test_authentication_error(self):
         """Test handling of authentication errors."""
+        from requests.exceptions import HTTPError
         with patch("src.pubmed_miner.services.github_manager.requests.get") as mock_get:
             mock_response = Mock()
             mock_response.status_code = 401
             mock_response.text = "Bad credentials"
+            http_error = HTTPError("401 Unauthorized")
+            http_error.response = mock_response
+            mock_response.raise_for_status.side_effect = http_error
             mock_get.return_value = mock_response
 
             with pytest.raises(GitHubError, match="GitHub authentication failed"):
-                self.manager._find_existing_issue("test-topic")
+                self.api_manager._find_existing_issue("test-topic")
+
+            # stats side effects should still be recorded even on 401 path
+            assert self.api_manager._stats_errors >= 1
+            assert self.api_manager._stats_api_calls >= 1
 
     def test_close_issue(self):
         """Test closing an issue."""
@@ -408,9 +451,10 @@ class TestGitHubIssuesManager:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {"number": 42, "state": "closed"}
+            mock_response.raise_for_status = Mock()  # no exception
             mock_patch.return_value = mock_response
 
-            result = self.manager.close_issue(42)
+            result = self.api_manager.close_issue(42)
 
             assert result["state"] == "closed"
             mock_patch.assert_called_once()
@@ -423,9 +467,10 @@ class TestGitHubIssuesManager:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {"number": 42, "state": "open"}
+            mock_response.raise_for_status = Mock()  # no exception
             mock_patch.return_value = mock_response
 
-            result = self.manager.reopen_issue(42)
+            result = self.api_manager.reopen_issue(42)
 
             assert result["state"] == "open"
             mock_patch.assert_called_once()
@@ -442,7 +487,7 @@ class TestGitHubIssuesManager:
                 with patch.object(self.manager, "find_existing_issue_for_date") as mock_find:
                     mock_find.return_value = None
                     with patch.object(self.manager, "_create_issue") as mock_create:
-                        mock_create.return_value = {"number": 42, "created": True}
+                        mock_create.return_value = {"number": 42, "created": True, "mock_mode": True}
                         result = self.manager.create_or_update_issue(
                             topic, self.sample_papers
                         )

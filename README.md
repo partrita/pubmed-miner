@@ -50,7 +50,7 @@
 ## 📦 설치
 
 ### 사전 요구사항
-- Python 3.8 이상
+- Python 3.9 이상
 - Git
 - GitHub 계정 (자동화 기능용)
 
@@ -58,7 +58,7 @@
 
 1. 저장소 복제:
    ```bash
-   git clone https://github.com/yourusername/pubmed-miner.git
+   git clone https://github.com/partrita/pubmed-miner.git
    cd pubmed-miner
    ```
 
@@ -219,15 +219,9 @@ uv run python scripts/automated_collection.py
 GitHub 자격 증명 없이 로컬 개발 및 테스트를 위해:
 
 ```bash
-# 로컬 테스트 스크립트 실행
-uv run python test_local_without_token.py
+# 스크립트가 자동 감지하여 모의 모드로 실행됩니다
+uv run python scripts/automated_collection.py
 ```
-
-이 스크립트는 다음을 보여줍니다:
-- 모의 모드 기능
-- 논문 점수 매기기 및 순위 지정
-- 이슈 형식화
-- GitHub 액세스 없이 모든 핵심 기능
 
 ### 모든 테스트 실행
 ```bash
@@ -447,7 +441,7 @@ logging:
 
 또는 디버그 플래그로 실행:
 ```bash
-uv run python scripts/automated_collection.py --debug
+uv run python scripts/automated_collection.py
 ```
 
 ### 로그 파일
@@ -607,7 +601,7 @@ uv run pytest
   title={PubMed Miner: Essential Papers Recommender},
   author={Kim, Taeyoon},
   year={2024},
-  url={https://github.com/example/pubmed-miner}
+  url={https://github.com/partrita/pubmed-miner}
 }
 ```
 
@@ -615,4 +609,4 @@ uv run pytest
 
 연구 커뮤니티를 위해 ❤️로 제작되었습니다
 
-질문, 문제 또는 제안 사항이 있으시면 GitHub에서 [이슈를 열어주세요](https://github.com/example/pubmed-miner/issues).
+질문, 문제 또는 제안 사항이 있으시면 GitHub에서 [이슈를 열어주세요](https://github.com/partrita/pubmed-miner/issues).

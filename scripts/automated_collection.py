@@ -35,6 +35,7 @@ from pubmed_miner.scoring.engine import ScoringEngine
 from pubmed_miner.services.mdbook_manager import MdBookManager
 from pubmed_miner.utils.change_tracker import ChangeTracker
 from pubmed_miner.utils.error_handler import ErrorHandler
+from pubmed_miner.services.github_manager import GitHubIssuesManager
 from pubmed_miner.models import TopicConfig, ScoredPaper
 
 

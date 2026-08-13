@@ -628,7 +628,7 @@ class CacheManager:
 
             with self._get_connection() as conn:
                 if table_name and table_name not in valid_tables:
-                    raise ValueError(f"Invalid table name: {table_name}")
+                    raise CacheError(f"Invalid table name: {table_name}")
 
                 tables = (
                     [table_name]
@@ -638,7 +638,7 @@ class CacheManager:
 
                 for table in tables:
                     if table not in valid_tables:
-                        raise ValueError(f"Invalid table name: {table}")
+                        raise CacheError(f"Invalid table name: {table}")
                     cursor = conn.execute(f"SELECT * FROM {table}")  # nosec B608
                     rows = cursor.fetchall()
                     export_data[table] = [dict(row) for row in rows]

@@ -39,6 +39,7 @@ class GitHubConfig:
     issue_labels: List[str] = field(
         default_factory=lambda: ["essential-papers", "automated"]
     )
+    issue_prefix: str = "Essential Papers"
 
     def __post_init__(self):
         """Validate GitHub configuration."""

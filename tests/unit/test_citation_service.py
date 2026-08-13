@@ -3,6 +3,7 @@ Unit tests for CitationService.
 """
 
 import pytest
+import requests
 from unittest.mock import Mock, patch
 from datetime import datetime, timedelta
 
@@ -26,22 +27,16 @@ class TestCitationService:
     @patch("src.pubmed_miner.services.citation_service.requests.get")
     def test_get_citation_count_crossref_success(self, mock_get):
         """Test successful citation count retrieval from Crossref."""
-        # Mock Crossref API response
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"message": {"is-referenced-by-count": 150}}
         mock_get.return_value = mock_response
 
-        # Mock cache miss
         with patch.object(self.service.cache_manager, "get_citation") as mock_cache_get:
             mock_cache_get.return_value = None
 
-            with patch.object(
-                self.service.cache_manager, "save_citation"
-            ) as mock_cache_save:
-                count = self.service.get_citation_count(
-                    "12345", doi="10.1038/nature12345"
-                )
+            with patch.object(self.service.cache_manager, "save_citation") as mock_cache_save:
+                count = self.service.get_citation_count("12345", doi="10.1038/nature12345")
 
                 assert count == 150
                 mock_cache_save.assert_called_once()
@@ -49,9 +44,11 @@ class TestCitationService:
     @patch("src.pubmed_miner.services.citation_service.requests.get")
     def test_get_citation_count_semantic_scholar_fallback(self, mock_get):
         """Test fallback to Semantic Scholar when Crossref fails."""
-        # Mock Crossref failure and Semantic Scholar success
         crossref_response = Mock()
         crossref_response.status_code = 404
+        crossref_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            "404 Not Found"
+        )
 
         semantic_response = Mock()
         semantic_response.status_code = 200
@@ -67,7 +64,6 @@ class TestCitationService:
 
     def test_get_citation_count_from_cache(self):
         """Test citation count retrieval from cache."""
-        # Mock cache hit
         cached_citation = CitationCache(
             pmid="12345",
             citation_count=100,
@@ -83,11 +79,10 @@ class TestCitationService:
 
     def test_get_citation_count_expired_cache(self):
         """Test citation count with expired cache entry."""
-        # Mock expired cache entry
         expired_citation = CitationCache(
             pmid="12345",
             citation_count=100,
-            last_updated=datetime.now() - timedelta(days=10),  # Expired
+            last_updated=datetime.now() - timedelta(days=10),
             source="crossref",
         )
 
@@ -98,7 +93,7 @@ class TestCitationService:
                 mock_fetch.return_value = (150, "crossref")
 
                 count = self.service.get_citation_count("12345")
-                assert count == 150  # Should fetch new data
+                assert count == 150
 
     def test_get_citation_count_invalid_pmid(self):
         """Test citation count with invalid PMID."""
@@ -111,7 +106,6 @@ class TestCitationService:
     @patch("src.pubmed_miner.services.citation_service.requests.get")
     def test_get_citation_count_api_failure(self, mock_get):
         """Test citation count when all APIs fail."""
-        # Mock all API failures
         mock_response = Mock()
         mock_response.status_code = 500
         mock_get.return_value = mock_response
@@ -120,13 +114,12 @@ class TestCitationService:
             mock_cache_get.return_value = None
 
             count = self.service.get_citation_count("12345")
-            assert count == 0  # Should return 0 when all APIs fail
+            assert count == 0
 
     def test_batch_get_citation_counts(self):
         """Test batch citation count retrieval."""
         pmids = ["12345", "67890", "11111"]
 
-        # Mock individual calls
         with patch.object(self.service, "get_citation_count") as mock_get:
             mock_get.side_effect = [100, 50, 200]
 
@@ -159,10 +152,12 @@ class TestCitationService:
     @patch("src.pubmed_miner.services.citation_service.requests.get")
     def test_crossref_api_rate_limiting(self, mock_get):
         """Test Crossref API rate limiting handling."""
-        # Mock rate limit response
         mock_response = Mock()
         mock_response.status_code = 429
         mock_response.headers = {"Retry-After": "60"}
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            "429 Too Many Requests"
+        )
         mock_get.return_value = mock_response
 
         with patch.object(self.service.cache_manager, "get_citation") as mock_cache_get:
@@ -171,17 +166,14 @@ class TestCitationService:
             with patch("time.sleep") as mock_sleep:
                 count = self.service.get_citation_count("12345", doi="10.1038/test")
 
-                # Should have slept due to rate limiting
                 mock_sleep.assert_called_with(60)
-                assert count == 0  # Should return 0 after rate limit
+                assert count == 0
 
     def test_doi_validation(self):
         """Test DOI format validation."""
-        # Valid DOIs
         assert self.service._validate_doi("10.1038/nature12345") is True
         assert self.service._validate_doi("10.1001/jama.2023.12345") is True
 
-        # Invalid DOIs
         assert self.service._validate_doi("") is False
         assert self.service._validate_doi("invalid-doi") is False
         assert self.service._validate_doi("10.invalid") is False
@@ -190,10 +182,10 @@ class TestCitationService:
     def test_pmid_to_doi_lookup(self):
         """Test PMID to DOI lookup functionality."""
         with patch(
-            "src.pubmed_miner.services.citation_service.Entrez.efetch"
-        ) as mock_efetch:
+            "src.pubmed_miner.services.citation_service.BioEntrez"
+        ) as mock_entrez:
             mock_handle = Mock()
-            mock_handle.read.return_value = """<?xml version="1.0" ?>
+            mock_handle.read.return_value = b"""<?xml version="1.0" ?>
             <PubmedArticleSet>
                 <PubmedArticle>
                     <PubmedData>
@@ -214,7 +206,7 @@ class TestCitationService:
             "src.pubmed_miner.services.citation_service.Entrez.efetch"
         ) as mock_efetch:
             mock_handle = Mock()
-            mock_handle.read.return_value = """<?xml version="1.0" ?>
+            mock_handle.read.return_value = b"""<?xml version="1.0" ?>
             <PubmedArticleSet>
                 <PubmedArticle>
                     <PubmedData>
@@ -230,7 +222,6 @@ class TestCitationService:
 
     def test_cache_expiry_check(self):
         """Test cache expiry checking."""
-        # Recent cache entry (not expired)
         recent_cache = CitationCache(
             pmid="12345",
             citation_count=100,
@@ -239,7 +230,6 @@ class TestCitationService:
         )
         assert not self.service._is_cache_expired(recent_cache)
 
-        # Old cache entry (expired)
         old_cache = CitationCache(
             pmid="12345",
             citation_count=100,
@@ -270,7 +260,7 @@ class TestCitationService:
     def test_clear_expired_cache(self):
         """Test clearing expired cache entries."""
         with patch.object(
-            self.service.cache_manager, "clear_expired_citations"
+            self.service.cache_manager, "clear_expired"
         ) as mock_clear:
             mock_clear.return_value = 5
 
@@ -281,7 +271,6 @@ class TestCitationService:
     @patch("src.pubmed_miner.services.citation_service.requests.get")
     def test_semantic_scholar_api_format(self, mock_get):
         """Test Semantic Scholar API response format handling."""
-        # Mock Semantic Scholar response with different format
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -313,18 +302,15 @@ class TestCitationService:
             except Exception as e:
                 errors.append(e)
 
-        # Create multiple threads
         threads = []
         for i in range(10):
             thread = threading.Thread(target=make_request, args=(f"1234{i}",))
             threads.append(thread)
             thread.start()
 
-        # Wait for all threads to complete
         for thread in threads:
             thread.join()
 
-        # All requests should succeed
         assert len(errors) == 0
         assert len(results) == 10
 
@@ -333,7 +319,6 @@ class TestCitationService:
         with patch(
             "src.pubmed_miner.services.citation_service.requests.get"
         ) as mock_get:
-            # First call fails, second succeeds
             failure_response = Mock()
             failure_response.status_code = 500
 
@@ -359,7 +344,6 @@ class TestCitationService:
         with patch(
             "src.pubmed_miner.services.citation_service.requests.get"
         ) as mock_get:
-            # Mock malformed JSON response
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.side_effect = ValueError("Invalid JSON")
@@ -371,7 +355,7 @@ class TestCitationService:
                 mock_cache_get.return_value = None
 
                 count = self.service.get_citation_count("12345", doi="10.1038/test")
-                assert count == 0  # Should handle gracefully
+                assert count == 0
 
     def test_update_cache_settings(self):
         """Test updating cache settings."""
@@ -379,6 +363,5 @@ class TestCitationService:
 
         self.service.update_cache_settings(new_settings)
 
-        # Verify settings were updated
-        assert hasattr(self.service, "cache_expiry_days")
-        assert self.service.cache_expiry_days == 14
+        assert self.service.cache_manager.cache_expiry_days == 14
+        assert self.service.cache_manager.max_cache_size == 10000

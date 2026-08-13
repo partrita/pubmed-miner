@@ -2,435 +2,333 @@
 Citation information collection service.
 """
 
-import threading
-from concurrent.futures import ThreadPoolExecutor
-import requests
-import time
 import logging
-from typing import Dict, List, Optional, Union
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
+from typing import List, Optional, Tuple, Dict
+
+import requests
+from urllib3.util.retry import Retry
 
 from ..models.cache import CitationCache
-from ..utils.error_handler import retry_api_calls
 
 logger = logging.getLogger(__name__)
 
+try:
+    from Bio import Entrez as BioEntrez
+    HAS_BIOENTRZ = True
+except ImportError:
+    BioEntrez = None
+    HAS_BIOENTRZ = False
+
+
+class CacheManager:
+    """Manages citation count caching."""
+
+    def __init__(self, cache_expiry_days: int = 7, max_cache_size: int = 5000):
+        self.cache_expiry_days = cache_expiry_days
+        self.max_cache_size = max_cache_size
+        self.cache: Dict[str, CitationCache] = {}
+
+    def get_citation(
+        self, pmid: str, doi: Optional[str] = None
+    ) -> Optional[CitationCache]:
+        key = pmid
+        if doi:
+            key = f"{pmid}:{doi}"
+        return self.cache.get(key)
+
+    def save_citation(
+        self, pmid: str, count: int, source: str, doi: Optional[str] = None
+    ) -> None:
+        key = pmid
+        if doi:
+            key = f"{pmid}:{doi}"
+        self.cache[key] = CitationCache(
+            pmid=pmid,
+            citation_count=count,
+            last_updated=datetime.now(),
+            source=source,
+        )
+
+    def is_expired(self, citation: CitationCache) -> bool:
+        return citation.is_expired(self.cache_expiry_days)
+
+    def clear_expired(self) -> int:
+        expired_keys = [
+            k for k, v in self.cache.items() if self.is_expired(v)
+        ]
+        for k in expired_keys:
+            del self.cache[k]
+        return len(expired_keys)
+
+    clear_expired_citations = clear_expired
+
+    clear_expired_citations = clear_expired
+
+    def get_all_papers(self) -> List[CitationCache]:
+        return list(self.cache.values())
+
+    def cleanup_unused(self, max_age_days: int = 30) -> int:
+        cutoff = datetime.now() - timedelta(days=max_age_days)
+        old_keys = [k for k, v in self.cache.items() if v.last_updated < cutoff]
+        for k in old_keys:
+            del self.cache[k]
+        return len(old_keys)
+
 
 class CitationService:
-    """Service for collecting citation information from multiple sources."""
+    """Service for collecting citation information for papers."""
 
-    def __init__(self, cache_manager=None):
-        """Initialize citation service.
+    def __init__(
+        self,
+        cache_expiry_days: int = 7,
+        max_cache_size: int = 5000,
+        retry_attempts: int = 3,
+        retry_delay: float = 1.0,
+        crossref_email: Optional[str] = None,
+        cache_manager: Optional[CacheManager] = None,
+    ):
+        self.logger = logging.getLogger(__name__)
+        self.cache_manager = cache_manager or CacheManager(
+            cache_expiry_days=cache_expiry_days,
+            max_cache_size=max_cache_size,
+        )
+        self.crossref_base_url = "https://api.crossref.org/works"
+        self.semantic_scholar_base_url = (
+            "https://api.semanticscholar.org/graph/v1/paper"
+        )
+        self.retry_attempts = retry_attempts
+        self.retry_delay = retry_delay
+        self.session = None
 
-        Args:
-            cache_manager: Optional cache manager for storing citation data
-        """
-        self.cache_manager = cache_manager
-        self.last_request_times = {"crossref": 0.0, "semantic_scholar": 0.0, "pmc": 0.0}
+        self._total_requests = 0
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self._api_calls = 0
+        self._crossref_calls = 0
+        self._semantic_scholar_calls = 0
+        self._error_count = 0
+        self._total_response_time = 0.0
 
-        # Rate limits (requests per second)
-        self.rate_limits = {"crossref": 50, "semantic_scholar": 100, "pmc": 3}
-        self._lock = threading.Lock()
+        self.logger.info("Initialized CitationService")
 
-        logger.info("Initialized CitationService")
+    def get_citation_count(
+        self, pmid: str, doi: Optional[str] = None
+    ) -> int:
+        """Get citation count for a paper using PMID or DOI."""
+        if not pmid:
+            raise ValueError("PMID cannot be empty")
+        if not pmid.isdigit():
+            raise ValueError("PMID must be numeric")
 
-    def get_citation_count(self, pmid: str) -> Optional[int]:
-        """Get citation count for a single PMID.
+        self._total_requests += 1
+        self._api_calls += 1
 
-        Args:
-            pmid: PubMed ID
+        cached = self.cache_manager.get_citation(pmid, doi)
+        if cached and not self._is_cache_expired(cached):
+            self._cache_hits += 1
+            return cached.citation_count
 
-        Returns:
-            Citation count or None if not found
-        """
-        # Check cache first
-        if self.cache_manager:
-            cached_count = self._get_cached_citation(pmid)
-            if cached_count is not None:
-                return cached_count
+        self._cache_misses += 1
 
-        # Try multiple sources
-        citation_count = None
+        for attempt in range(self.retry_attempts):
+            try:
+                count, source = self._fetch_from_apis(pmid, doi)
+                if count is not None:
+                    self.cache_manager.save_citation(
+                        pmid, count, source, doi
+                    )
+                    return count
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code == 429:
+                    retry_after = e.response.headers.get("Retry-After", "60")
+                    try:
+                        sleep_time = int(retry_after)
+                    except (ValueError, TypeError):
+                        sleep_time = 60
+                    time.sleep(sleep_time)
+                    continue
+                self._error_count += 1
+            except Exception as e:
+                self._error_count += 1
+                self.logger.error(
+                    f"Failed to fetch citation count for PMID {pmid}: {e}"
+                )
 
-        # Try Crossref first (most reliable)
+        return 0
+
+    def _fetch_from_apis(
+        self, pmid: str, doi: Optional[str] = None
+    ) -> Tuple[Optional[int], str]:
+        if doi:
+            count = self._fetch_from_crossref(doi)
+            if count is not None:
+                return count, "crossref"
+
+        count = self._fetch_from_semantic_scholar(pmid, doi)
+        if count is not None:
+            return count, "semantic_scholar"
+
+        return None, None
+
+    def _fetch_from_crossref(self, doi: str) -> Optional[int]:
         try:
-            citation_count = self._get_crossref_citations(pmid)
-            if citation_count is not None:
-                self._cache_citation(pmid, citation_count, "crossref")
-                return citation_count
-        except Exception as e:
-            logger.warning(f"Crossref failed for {pmid}: {e}")
+            response = requests.get(
+                f"{self.crossref_base_url}/{doi}",
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict) and "message" in data:
+                count = data["message"].get("is-referenced-by-count", 0)
+            elif isinstance(data, dict):
+                count = data.get("is-referenced-by-count", 0)
+            else:
+                count = 0
+            self._crossref_calls += 1
+            return count
+        except requests.exceptions.RequestException:
+            return None
+        except Exception:
+            return None
 
-        # Try Semantic Scholar as fallback
+    def _fetch_from_semantic_scholar(
+        self, pmid: str, doi: Optional[str] = None
+    ) -> int:
         try:
-            citation_count = self._get_semantic_scholar_citations(pmid)
-            if citation_count is not None:
-                self._cache_citation(pmid, citation_count, "semantic_scholar")
-                return citation_count
-        except Exception as e:
-            logger.warning(f"Semantic Scholar failed for {pmid}: {e}")
+            identifier = doi if doi else f"pubmed:{pmid}"
+            url = (
+                f"{self.semantic_scholar_base_url}/"
+                f"{identifier}?fields=citationCount"
+            )
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            count = data.get("citationCount", 0)
+            self._semantic_scholar_calls += 1
+            return count
+        except requests.exceptions.RequestException:
+            return 0
+        except Exception:
+            return 0
 
-        # Try PMC as last resort
-        try:
-            citation_count = self._get_pmc_citations(pmid)
-            if citation_count is not None:
-                self._cache_citation(pmid, citation_count, "pmc")
-                return citation_count
-        except Exception as e:
-            logger.warning(f"PMC failed for {pmid}: {e}")
+    def _is_cache_expired(self, citation: CitationCache) -> bool:
+        return self.cache_manager.is_expired(citation)
 
-        logger.warning(f"No citation data found for PMID {pmid}")
-        return None
-
-    def batch_get_citations(
-        self, pmids: List[str], skip_errors: bool = True
+    def batch_get_citation_counts(
+        self, pmids: List[str], skip_errors: bool = False
     ) -> Dict[str, int]:
-        """Get citation counts for multiple PMIDs.
-
-        Args:
-            pmids: List of PubMed IDs
-            skip_errors: If True, skip PMIDs that fail and continue processing
-
-        Returns:
-            Dictionary mapping PMID to citation count (None values excluded)
-        """
-        citations = {}
-
-        # Check cache for all PMIDs first
-        uncached_pmids = []
-        if self.cache_manager:
-            for pmid in pmids:
-                cached_count = self._get_cached_citation(pmid)
-                if cached_count is not None:
-                    citations[pmid] = cached_count
-                else:
-                    uncached_pmids.append(pmid)
-        else:
-            uncached_pmids = pmids
-
-        if not uncached_pmids:
-            return citations
-
-        logger.info(f"Fetching citations for {len(uncached_pmids)} uncached PMIDs in parallel")
-
-        # Use ThreadPoolExecutor for parallel fetching
-        max_workers = min(len(uncached_pmids), 10)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Map PMIDs to the single get_citation_count method
-            future_to_pmid = {executor.submit(self.get_citation_count, pmid): pmid for pmid in uncached_pmids}
-
-            for future in future_to_pmid:
-                pmid = future_to_pmid[future]
-                try:
-                    count = future.result()
-                    if count is not None:
-                        citations[pmid] = self._safe_citation_count(count)
-                    elif not skip_errors:
-                        citations[pmid] = 0
-                except Exception as e:
-                    logger.warning(f"Parallel fetch failed for {pmid}: {e}")
-                    if not skip_errors:
-                        citations[pmid] = 0
-
-        logger.info(f"Retrieved citations for {len(citations)} PMIDs")
-        return citations
-
-    def _fetch_citation_batch(
-        self, pmids: List[str], skip_errors: bool = True
-    ) -> Dict[str, int]:
-        """Fetch citations for a batch of PMIDs.
-
-        Args:
-            pmids: List of PubMed IDs
-            skip_errors: If True, skip PMIDs that fail and continue processing
-
-        Returns:
-            Dictionary mapping PMID to citation count (None values excluded)
-        """
-        citations = {}
-
+        results = {}
         for pmid in pmids:
             try:
                 count = self.get_citation_count(pmid)
-                if count is not None:
-                    # Ensure count is a valid integer
-                    safe_count = self._safe_citation_count(count)
-                    citations[pmid] = safe_count
-                elif not skip_errors:
-                    # If not skipping errors, set to 0 as fallback
-                    citations[pmid] = 0
-            except Exception as e:
-                logger.warning(f"Failed to get citations for {pmid}: {e}")
-                if not skip_errors:
-                    citations[pmid] = 0
-                continue
+                results[pmid] = count
+            except (ValueError, Exception):
+                if skip_errors:
+                    continue
+                else:
+                    raise
+        return results
 
-        return citations
+    def update_cache_settings(self, settings: Dict) -> None:
+        if "cache_expiry_days" in settings:
+            self.cache_manager.cache_expiry_days = settings[
+                "cache_expiry_days"
+            ]
+        if "max_cache_size" in settings:
+            self.cache_manager.max_cache_size = settings[
+                "max_cache_size"
+            ]
 
-    @retry_api_calls(max_attempts=3, delay=1.0)
-    def _get_crossref_citations(self, pmid: str) -> Optional[int]:
-        """Get citation count from Crossref API.
+    def get_cached_papers(self) -> List[CitationCache]:
+        return self.cache_manager.get_all_papers()
 
-        Args:
-            pmid: PubMed ID
+    def clear_expired_cache(self) -> int:
+        return self.cache_manager.clear_expired()
 
-        Returns:
-            Citation count or None
-        """
-        self._rate_limit("crossref")
+    def get_statistics(self) -> Dict:
+        return {
+            "total_requests": self._total_requests,
+            "cache_hits": self._cache_hits,
+            "cache_misses": self._cache_misses,
+            "api_calls": self._api_calls,
+            "crossref_calls": self._crossref_calls,
+            "semantic_scholar_calls": self._semantic_scholar_calls,
+            "error_count": self._error_count,
+            "average_response_time": self._total_response_time,
+        }
 
+    def _validate_doi(self, doi: str) -> bool:
+        if not doi or not isinstance(doi, str):
+            return False
+        return doi.startswith("10.") and "/" in doi
+
+    def _get_doi_from_pmid(self, pmid: str) -> Optional[str]:
         try:
-            # First, get DOI from PubMed
-            doi = self._get_doi_for_pmid(pmid)
-            if not doi:
+            if not HAS_BIOENTRZ:
+                self.logger.warning(
+                    f"Bio.Entrez not available, cannot get DOI for PMID {pmid}"
+                )
                 return None
 
-            # Query Crossref for citation count
-            url = f"https://api.crossref.org/works/{doi}"
-            headers = {
-                "User-Agent": "PubMedMiner/1.0 (mailto:pubmed.miner@example.com)"
-            }
-
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-
-            data = response.json()
-            citation_count = data.get("message", {}).get("is-referenced-by-count", 0)
-
-            logger.debug(f"Crossref citations for {pmid}: {citation_count}")
-            return citation_count
-
-        except requests.exceptions.RequestException as e:
-            logger.warning(f"Crossref API error for {pmid}: {e}")
-            return None
-        except Exception as e:
-            logger.warning(f"Error getting Crossref citations for {pmid}: {e}")
-            return None
-
-    @retry_api_calls(max_attempts=3, delay=1.0)
-    def _get_semantic_scholar_citations(self, pmid: str) -> Optional[int]:
-        """Get citation count from Semantic Scholar API.
-
-        Args:
-            pmid: PubMed ID
-
-        Returns:
-            Citation count or None
-        """
-        self._rate_limit("semantic_scholar")
-
-        try:
-            url = f"https://api.semanticscholar.org/graph/v1/paper/PMID:{pmid}"
-            params = {"fields": "citationCount"}
-
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-
-            data = response.json()
-            citation_count = data.get("citationCount", 0)
-
-            logger.debug(f"Semantic Scholar citations for {pmid}: {citation_count}")
-            return citation_count
-
-        except requests.exceptions.RequestException as e:
-            if response.status_code == 404:
-                logger.debug(f"Paper {pmid} not found in Semantic Scholar")
-                return None
-            logger.warning(f"Semantic Scholar API error for {pmid}: {e}")
-            return None
-        except Exception as e:
-            logger.warning(f"Error getting Semantic Scholar citations for {pmid}: {e}")
-            return None
-
-    def _get_pmc_citations(self, pmid: str) -> Optional[int]:
-        """Get citation count from PMC (placeholder implementation).
-
-        Args:
-            pmid: PubMed ID
-
-        Returns:
-            Citation count or None
-        """
-        # PMC doesn't have a direct citation API, so this is a placeholder
-        # In a real implementation, you might scrape PMC or use other methods
-        logger.debug(f"PMC citation lookup not implemented for {pmid}")
-        return None
-
-    def _get_doi_for_pmid(self, pmid: str) -> Optional[str]:
-        """Get DOI for a PMID using PubMed API.
-
-        Args:
-            pmid: PubMed ID
-
-        Returns:
-            DOI string or None
-        """
-        try:
-            from Bio import Entrez
-
-            handle = Entrez.efetch(
-                db="pubmed", id=pmid, rettype="medline", retmode="xml"
+            Entrez = BioEntrez
+            Entrez.email = "pubmed.miner@example.com"
+            handle = Entrez.esearch(
+                db="pubmed", term=pmid, retmode="xml"
             )
-
-            records = Entrez.read(handle)
+            record = Entrez.read(handle)
             handle.close()
 
-            if not records["PubmedArticle"]:
+            pmids = record.get("IdList", [])
+            if not pmids:
                 return None
 
-            record = records["PubmedArticle"][0]
-
-            # Try multiple methods to extract DOI
-            # Method 1: ELocationID
-            article = record["MedlineCitation"]["Article"]
-            elocation_ids = article.get("ELocationID", [])
-
-            for elocation in elocation_ids:
-                if hasattr(elocation, "attributes"):
-                    if elocation.attributes.get("EIdType") == "doi":
-                        return str(elocation)
-
-            # Method 2: ArticleIdList
-            if "PubmedData" in record:
-                article_ids = record["PubmedData"].get("ArticleIdList", [])
-                for article_id in article_ids:
-                    if hasattr(article_id, "attributes"):
-                        if article_id.attributes.get("IdType") == "doi":
-                            return str(article_id)
-
-            return None
-
-        except Exception as e:
-            logger.warning(f"Error getting DOI for {pmid}: {e}")
-            return None
-
-    def _get_cached_citation(self, pmid: str) -> Optional[int]:
-        """Get citation count from cache.
-
-        Args:
-            pmid: PubMed ID
-
-        Returns:
-            Cached citation count or None
-        """
-        if not self.cache_manager:
-            return None
-
-        try:
-            cache_entry = self.cache_manager.get_citation(pmid)
-            if cache_entry and not cache_entry.is_expired():
-                logger.debug(
-                    f"Using cached citation for {pmid}: {cache_entry.citation_count}"
-                )
-                return cache_entry.citation_count
-        except Exception as e:
-            logger.warning(f"Error reading citation cache for {pmid}: {e}")
-
-        return None
-
-    def _cache_citation(self, pmid: str, count: int, source: str) -> None:
-        """Cache citation count.
-
-        Args:
-            pmid: PubMed ID
-            count: Citation count
-            source: Data source name
-        """
-        if not self.cache_manager:
-            return
-
-        try:
-            cache_entry = CitationCache(
-                pmid=pmid,
-                citation_count=count,
-                last_updated=datetime.now(),
-                source=source,
+            fetch_handle = Entrez.efetch(
+                db="pubmed",
+                id=pmid,
+                rettype="medline",
+                retmode="xml",
             )
-            self.cache_manager.save_citation(cache_entry)
-            logger.debug(f"Cached citation for {pmid}: {count} from {source}")
+            article_data = Entrez.read(fetch_handle)
+            fetch_handle.close()
+
+            article_ids = article_data.get("PubmedArticleSet", [])
+            if isinstance(article_ids, dict):
+                article_ids = [article_ids]
+            for article in article_ids:
+                id_list = article.get("PubmedData", {}).get(
+                    "ArticleIdList", []
+                )
+                if isinstance(id_list, dict):
+                    id_list = [id_list]
+                for id_elem in id_list:
+                    if (
+                        isinstance(id_elem, dict)
+                        and id_elem.get("IdType") == "doi"
+                    ):
+                        doi = id_elem.get("Id") or id_elem.get("#text", "")
+                        if doi:
+                            return doi
+
+            return None
         except Exception as e:
-            logger.warning(f"Error caching citation for {pmid}: {e}")
+            self.logger.warning(
+                f"Failed to get DOI for PMID {pmid}: {e}"
+            )
+            return None
 
-    def _rate_limit(self, service: str) -> None:
-        """Apply rate limiting for a service with thread safety.
-        Reserves a time slot for the request.
-        """
-        if service not in self.rate_limits:
-            return
+    def _clean_html(self, text: str) -> str:
+        import re
 
-        with self._lock:
-            min_interval = 1.0 / self.rate_limits[service]
-            current_time = time.time()
-            last_request = self.last_request_times.get(service, 0)
+        clean = re.sub(r"<[^>]+>", "", text)
+        clean = clean.replace("&nbsp;", " ")
+        clean = clean.replace("&amp;", "&")
+        clean = clean.replace("&lt;", "<")
+        clean = clean.replace("&gt;", ">")
+        clean = clean.replace("&quot;", '"')
+        clean = clean.strip()
+        return clean
 
-            # Calculate when this request is allowed to run
-            wait_until = max(current_time, last_request + min_interval)
-            self.last_request_times[service] = wait_until
-
-            sleep_time = wait_until - current_time
-
-        if sleep_time > 0:
-            time.sleep(sleep_time)
-
-    def update_citation_cache(self, pmid: str, count: int) -> None:
-        """Update citation count in cache.
-
-        Args:
-            pmid: PubMed ID
-            count: New citation count
-        """
-        self._cache_citation(pmid, count, "manual_update")
-
-    def clear_expired_cache(self, max_age_days: int = 7) -> int:
-        """Clear expired cache entries.
-
-        Args:
-            max_age_days: Maximum age for cache entries in days
-
-        Returns:
-            Number of entries cleared
-        """
-        if not self.cache_manager:
-            return 0
-
-        try:
-            cleared_count = self.cache_manager.clear_expired_citations(max_age_days)
-            logger.info(f"Cleared {cleared_count} expired citation cache entries")
-            return cleared_count
-        except Exception as e:
-            logger.error(f"Error clearing expired cache: {e}")
-            return 0
-
-    def get_cache_stats(self) -> Dict[str, int]:
-        """Get cache statistics.
-
-        Returns:
-            Dictionary with cache statistics
-        """
-        if not self.cache_manager:
-            return {"total": 0, "expired": 0}
-
-        try:
-            return self.cache_manager.get_citation_cache_stats()
-        except Exception as e:
-            logger.error(f"Error getting cache stats: {e}")
-            return {"total": 0, "expired": 0}
-
-    def _safe_citation_count(self, count: Union[int, str, None]) -> int:
-        """Safely convert citation count to integer, handling None and invalid values.
-
-        Args:
-            count: Citation count value to convert
-
-        Returns:
-            Safe integer citation count (>= 0)
-        """
-        if count is None:
-            return 0
-
-        try:
-            int_count = int(count)
-            return max(0, int_count)  # Ensure non-negative
-        except (ValueError, TypeError):
-            logger.debug(f"Failed to convert citation count {count} to int, using 0")
-            return 0
+    def cleanup_unused_cache_entries(self, max_age_days: int = 30) -> int:
+        return self.cache_manager.cleanup_unused(max_age_days)

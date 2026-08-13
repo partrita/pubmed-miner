@@ -3,8 +3,8 @@ from datetime import datetime
 from src.pubmed_miner.services.mdbook_manager import MdBookManager
 from src.pubmed_miner.models.paper import ScoredPaper
 
-def test_xss_mitigation():
-    manager = MdBookManager(book_root="book_test")
+def test_xss_mitigation(tmp_path):
+    manager = MdBookManager(book_root=str(tmp_path / "book_test"))
     paper = ScoredPaper(
         pmid="123",
         title="<script>alert('title')</script>",
