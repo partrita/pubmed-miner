@@ -2,10 +2,10 @@
 Paper collection service for PubMed data retrieval.
 """
 
-import time
 import logging
+import time
 from datetime import datetime
-from typing import List, Dict, Optional, Any
+from typing import Any, cast
 
 from Bio import Entrez
 
@@ -38,7 +38,7 @@ class PaperCollectionService:
         self._error_count = 0
         self._rate_limit_hits = 0
 
-        Entrez.email = self.email
+        Entrez.email = self.email  # type: ignore[assignment]
 
         logger.info(f"Initialized PaperCollectionService with email: {email}")
 
@@ -46,9 +46,9 @@ class PaperCollectionService:
         self,
         query: str,
         max_results: int = 1000,
-        date_from: Optional[str] = None,
-        date_to: Optional[str] = None,
-    ) -> List[str]:
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[str]:
         """Search PubMed for papers matching the query.
 
         Args:
@@ -96,7 +96,7 @@ class PaperCollectionService:
                 pmids = records.get("IdList", [])
                 logger.info(f"Found {len(pmids)} papers for query: '{query}'")
 
-                return pmids
+                return cast(list[str], pmids)
             except Exception as e:
                 if attempt == max_retries - 1:
                     logger.error(f"Error searching PubMed for query '{query}': {e}")
@@ -107,11 +107,11 @@ class PaperCollectionService:
                 continue
 
         # Should not reach here
-        raise APIError(f"PubMed search failed: max retries exceeded")
+        raise APIError("PubMed search failed: max retries exceeded")
 
     def get_paper_details(
-        self, pmids: List[str], topic: Optional[str] = None
-    ) -> List[Paper]:
+        self, pmids: list[str], topic: str | None = None
+    ) -> list[Paper]:
         """Retrieve detailed information for a list of PMIDs.
 
         Args:
@@ -132,11 +132,11 @@ class PaperCollectionService:
             if not pmid or not isinstance(pmid, str):
                 raise ValueError("All PMIDs must be non-empty strings")
 
-        batches: List[List[str]] = []
+        batches: list[list[str]] = []
         for i in range(0, len(pmids), 100):
-            batches.append(pmids[i:i + 100])
+            batches.append(pmids[i : i + 100])
 
-        all_papers: List[Paper] = []
+        all_papers: list[Paper] = []
         for batch in batches:
             batch_papers = self._fetch_paper_batch(batch, topic=topic)
             all_papers.extend(batch_papers)
@@ -144,8 +144,8 @@ class PaperCollectionService:
         return all_papers
 
     def _fetch_paper_batch(
-        self, pmids: List[str], topic: Optional[str] = None
-    ) -> List[Paper]:
+        self, pmids: list[str], topic: str | None = None
+    ) -> list[Paper]:
         """Fetch a batch of paper details from PubMed.
 
         Args:
@@ -187,8 +187,8 @@ class PaperCollectionService:
             raise APIError(f"Failed to fetch paper details: {e}")
 
     def _parse_paper_record(
-        self, record: Dict, topic: Optional[str] = None
-    ) -> Optional[Paper]:
+        self, record: dict, topic: str | None = None
+    ) -> Paper | None:
         """Parse a PubMed record into a Paper object.
 
         Args:
@@ -206,9 +206,7 @@ class PaperCollectionService:
 
             title = article.get("ArticleTitle", "No Title")
 
-            authors = self._parse_authors(
-                article.get("AuthorList", [])
-            )
+            authors = self._parse_authors(article.get("AuthorList", []))
 
             journal = article.get("Journal", {}).get("Title", "Unknown Journal")
 
@@ -233,7 +231,7 @@ class PaperCollectionService:
             logger.warning(f"Error parsing paper record: {e}")
             return None
 
-    def _parse_authors(self, author_list) -> List[str]:
+    def _parse_authors(self, author_list: Any) -> list[str]:
         """Parse author list from XML.
 
         Args:
@@ -245,6 +243,7 @@ class PaperCollectionService:
         # If it's an XML string, parse it first
         if isinstance(author_list, str):
             from xml.etree import ElementTree as ET
+
             try:
                 root = ET.fromstring(author_list)
                 author_list = []
@@ -271,7 +270,7 @@ class PaperCollectionService:
                 authors.append(last_name)
         return authors
 
-    def _extract_abstract(self, record: Dict) -> Optional[str]:
+    def _extract_abstract(self, record: dict) -> str | None:
         """Extract abstract from PubMed record.
 
         Args:
@@ -290,7 +289,7 @@ class PaperCollectionService:
             pass
         return None
 
-    def _extract_doi(self, record: Dict) -> Optional[str]:
+    def _extract_doi(self, record: dict) -> str | None:
         """Extract DOI from PubMed record.
 
         Args:
@@ -303,12 +302,12 @@ class PaperCollectionService:
             if "PubmedData" in record:
                 article_ids = record["PubmedData"].get("ArticleIdList", [])
                 for article_id in article_ids:
-                    if isinstance(article_id, dict):
-                        if article_id.get("IdType") == "doi":
-                            return article_id.get("value")
-                    elif hasattr(article_id, "attributes"):
-                        if article_id.attributes.get("IdType") == "doi":
-                            return str(article_id)
+                    if isinstance(article_id, dict) and article_id.get("IdType") == "doi":
+                        return article_id.get("value")
+                    if hasattr(article_id, "attributes") and article_id.attributes.get(
+                        "IdType"
+                    ) == "doi":
+                        return str(article_id)
         except (KeyError, AttributeError):
             pass
         return None
@@ -326,7 +325,7 @@ class PaperCollectionService:
 
         self.last_request_time = time.time()
 
-    def _validate_pmid(self, pmid: Optional[str]) -> bool:
+    def _validate_pmid(self, pmid: str | None) -> bool:
         """Validate PMID format.
 
         Args:
@@ -335,15 +334,7 @@ class PaperCollectionService:
         Returns:
             True if valid, False otherwise
         """
-        if not pmid:
-            return False
-        if not isinstance(pmid, str):
-            return False
-        if not pmid.isdigit():
-            return False
-        if len(pmid) > 8:
-            return False
-        return True
+        return bool(pmid and isinstance(pmid, str) and pmid.isdigit() and len(pmid) <= 8)
 
     def reset_statistics(self) -> None:
         """Reset all statistics counters to zero."""
@@ -355,7 +346,7 @@ class PaperCollectionService:
         self._rate_limit_hits = 0
         self.last_request_time = 0.0
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get current statistics for the service.
 
         Returns:
@@ -370,7 +361,7 @@ class PaperCollectionService:
             "rate_limit_hits": self._rate_limit_hits,
         }
 
-    def _parse_authors_from_xml(self, author_data) -> str:
+    def _parse_authors_from_xml(self, author_data: Any) -> str:
         """Parse author information from XML data.
 
         Args:
@@ -382,7 +373,9 @@ class PaperCollectionService:
         if isinstance(author_data, str):
             return author_data
 
-        if hasattr(author_data, "findall") and callable(getattr(author_data, "findall", None)):
+        if hasattr(author_data, "findall") and callable(
+            getattr(author_data, "findall", None)
+        ):
             authors = []
             for author in author_data.findall("Author"):
                 last_name = author.findtext("LastName", "")
@@ -402,7 +395,7 @@ class PaperCollectionService:
 
         return str(author_data)
 
-    def _parse_date(self, date_dict) -> datetime:
+    def _parse_date(self, date_dict: Any) -> datetime:
         """Parse publication date from XML.
 
         Args:
@@ -415,6 +408,7 @@ class PaperCollectionService:
         if isinstance(date_dict, str):
             try:
                 from xml.etree import ElementTree as ET
+
                 root = ET.fromstring(date_dict)
                 year_text = root.findtext("Year", "2000")
                 month_text = root.findtext("Month", "1")
@@ -424,7 +418,7 @@ class PaperCollectionService:
                 day = int(day_text) if day_text else 1
                 return datetime(year, month, day)
             except Exception:
-                pass
+                logger.debug("Failed to parse date as XML, trying ISO format")
             # Fallback for ISO format string
             try:
                 return datetime.fromisoformat(date_dict)
@@ -432,7 +426,9 @@ class PaperCollectionService:
                 return datetime(2000, 1, 1)
 
         # Handle XML element
-        if hasattr(date_dict, "findtext") and callable(getattr(date_dict, "findtext", None)):
+        if hasattr(date_dict, "findtext") and callable(
+            getattr(date_dict, "findtext", None)
+        ):
             try:
                 year_text = date_dict.findtext("Year", "2000")
                 month_text = date_dict.findtext("Month", "1")
@@ -457,7 +453,7 @@ class PaperCollectionService:
         except (ValueError, KeyError, TypeError, AttributeError):
             return datetime(2000, 1, 1)
 
-    def _parse_date_from_xml(self, date_dict) -> datetime:
+    def _parse_date_from_xml(self, date_dict: Any) -> datetime:
         """Parse publication date from XML string or element.
 
         Args:
@@ -468,20 +464,21 @@ class PaperCollectionService:
         """
         return self._parse_date(date_dict)
 
-    def _parse_date_from_element(self, date_element) -> datetime:
+    def _parse_date_from_element(self, date_element: Any) -> datetime:
         """Parse date from XML element."""
         return self._parse_date(date_element)
 
     def _clean_text(self, text: str) -> str:
         """Clean text by unescaping HTML entities and collapsing whitespace.
-        
+
         Args:
             text: Text to clean
-            
+
         Returns:
             Cleaned text
         """
         import html as _html
+
         cleaned = _html.unescape(text)
-        cleaned = ' '.join(cleaned.split())
+        cleaned = " ".join(cleaned.split())
         return cleaned

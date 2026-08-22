@@ -1,17 +1,17 @@
 # Models package for data structures
 
-from .paper import Paper, ScoredPaper
-from .config import TopicConfig, GitHubConfig, ScoringWeights, SystemConfig
 from .cache import CitationCache, ImpactFactorCache, PaperMetadataCache
+from .config import GitHubConfig, ScoringWeights, SystemConfig, TopicConfig
+from .paper import Paper, ScoredPaper
 
 __all__ = [
-    "Paper",
-    "ScoredPaper",
-    "TopicConfig",
+    "CitationCache",
     "GitHubConfig",
+    "ImpactFactorCache",
+    "Paper",
+    "PaperMetadataCache",
+    "ScoredPaper",
     "ScoringWeights",
     "SystemConfig",
-    "CitationCache",
-    "ImpactFactorCache",
-    "PaperMetadataCache",
+    "TopicConfig",
 ]

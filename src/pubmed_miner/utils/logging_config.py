@@ -5,21 +5,26 @@ This module provides centralized logging configuration with support for
 different log levels, file rotation, and structured logging.
 """
 
-import os
-import sys
+import functools
 import logging
 import logging.handlers
-import functools
-from pathlib import Path
-from typing import Optional, Dict, Any
+import os
+import sys
+from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 
 class ColoredFormatter(logging.Formatter):
     """Custom formatter that adds colors to console output."""
 
     # ANSI color codes
-    COLORS = {
+    COLORS: ClassVar[dict[str, str]] = {
         "DEBUG": "\033[36m",  # Cyan
         "INFO": "\033[32m",  # Green
         "WARNING": "\033[33m",  # Yellow
@@ -28,7 +33,7 @@ class ColoredFormatter(logging.Formatter):
         "RESET": "\033[0m",  # Reset
     }
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         # Add color to levelname
         if record.levelname in self.COLORS:
             record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{self.COLORS['RESET']}"
@@ -38,8 +43,8 @@ class ColoredFormatter(logging.Formatter):
 class StructuredFormatter(logging.Formatter):
     """Formatter that outputs structured JSON logs."""
 
-    def format(self, record):
-        log_entry = {
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created).isoformat(),
             "level": record.levelname,
             "logger": record.name,
@@ -129,6 +134,7 @@ def setup_logging(
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(numeric_level)
 
+        console_formatter: logging.Formatter
         if structured_logging:
             console_formatter = StructuredFormatter()
         else:
@@ -149,6 +155,7 @@ def setup_logging(
         )
         file_handler.setLevel(numeric_level)
 
+        file_formatter: logging.Formatter
         if structured_logging:
             file_formatter = StructuredFormatter()
         else:
@@ -191,15 +198,17 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
-def log_function_call(logger: Optional[logging.Logger] = None):
+def log_function_call(
+    logger: logging.Logger | None = None,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator to log function calls with parameters and execution time.
 
     Args:
         logger: Logger instance to use (defaults to function's module logger)
     """
 
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             import time
 
             # Get logger
@@ -228,8 +237,8 @@ def log_function_call(logger: Optional[logging.Logger] = None):
 
 def log_performance_metrics(
     operation_name: str,
-    metrics: Dict[str, Any],
-    logger: Optional[logging.Logger] = None,
+    metrics: dict[str, Any],
+    logger: logging.Logger | None = None,
 ) -> None:
     """Log performance metrics for monitoring.
 
@@ -282,7 +291,7 @@ def setup_github_actions_logging() -> None:
 class GitHubActionsFormatter(logging.Formatter):
     """Formatter that outputs GitHub Actions workflow commands."""
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         message = record.getMessage()
 
         if record.levelno >= logging.ERROR:
@@ -298,7 +307,7 @@ class GitHubActionsFormatter(logging.Formatter):
 class LogContext:
     """Context manager for adding context to log messages."""
 
-    def __init__(self, logger: logging.Logger, **context):
+    def __init__(self, logger: logging.Logger, **context: Any) -> None:
         """Initialize log context.
 
         Args:
@@ -309,8 +318,8 @@ class LogContext:
         self.context = context
         self.old_factory = logging.getLogRecordFactory()
 
-    def __enter__(self):
-        def record_factory(*args, **kwargs):
+    def __enter__(self) -> "Self":
+        def record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
             record = self.old_factory(*args, **kwargs)
             for key, value in self.context.items():
                 setattr(record, key, value)
@@ -319,12 +328,17 @@ class LogContext:
         logging.setLogRecordFactory(record_factory)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         logging.setLogRecordFactory(self.old_factory)
 
 
 # Initialize logging on module import
-def initialize_default_logging():
+def initialize_default_logging() -> None:
     """Initialize default logging configuration."""
     log_level = os.getenv("LOG_LEVEL", "INFO")
 

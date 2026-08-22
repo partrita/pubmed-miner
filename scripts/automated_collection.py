@@ -12,31 +12,30 @@ Requirements addressed:
 - 4.3: MdBook page creation and updates
 """
 
+import logging
 import os
 import sys
-import logging
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 # Add src to path for imports
 # Path(__file__).parent is scripts/
 # Path(__file__).parent.parent is root/
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from pubmed_miner.utils.config_manager import ConfigurationManager
-from pubmed_miner.utils.csv_manager import CSVManager
-from pubmed_miner.services.paper_collection import PaperCollectionService
-from pubmed_miner.services.paper_details import PaperDetailsService
+from pubmed_miner.models import ScoredPaper, TopicConfig
+from pubmed_miner.scoring.engine import ScoringEngine
 from pubmed_miner.services.citation_service import CitationService
 from pubmed_miner.services.impact_factor_service import ImpactFactorService
-from pubmed_miner.scoring.engine import ScoringEngine
 from pubmed_miner.services.mdbook_manager import MdBookManager
+from pubmed_miner.services.paper_collection import PaperCollectionService
+from pubmed_miner.services.paper_details import PaperDetailsService
 from pubmed_miner.utils.change_tracker import ChangeTracker
+from pubmed_miner.utils.config_manager import ConfigurationManager
+from pubmed_miner.utils.csv_manager import CSVManager
 from pubmed_miner.utils.error_handler import ErrorHandler
-from pubmed_miner.services.github_manager import GitHubIssuesManager
-from pubmed_miner.models import TopicConfig, ScoredPaper
 
 
 class AutomatedCollectionOrchestrator:
@@ -92,7 +91,7 @@ class AutomatedCollectionOrchestrator:
             ],
         )
 
-    def run_complete_workflow(self) -> Dict[str, Any]:
+    def run_complete_workflow(self) -> dict[str, Any]:
         """Execute the complete automated workflow.
 
         Returns:
@@ -134,7 +133,7 @@ class AutomatedCollectionOrchestrator:
                         results["pages_created"] += 1
 
                 except Exception as e:
-                    error_msg = f"Failed to process topic '{topic.name}': {str(e)}"
+                    error_msg = f"Failed to process topic '{topic.name}': {e!s}"
                     self.logger.error(error_msg)
                     results["errors"].append(error_msg)
 
@@ -155,14 +154,14 @@ class AutomatedCollectionOrchestrator:
             return results
 
         except Exception as e:
-            error_msg = f"Critical error in workflow execution: {str(e)}"
+            error_msg = f"Critical error in workflow execution: {e!s}"
             self.logger.error(error_msg)
             self.logger.error(traceback.format_exc())
             results["errors"].append(error_msg)
             results["success"] = False
             return results
 
-    def process_topic(self, topic: TopicConfig) -> Dict[str, Any]:
+    def process_topic(self, topic: TopicConfig) -> dict[str, Any]:
         """Process a single topic through the complete pipeline.
 
         Args:
@@ -269,7 +268,7 @@ class AutomatedCollectionOrchestrator:
                         essential_papers,
                         "data/collections.csv",
                         include_scoring=True,
-                        append=True
+                        append=True,
                     )
                     self.logger.info(f"Saved {len(essential_papers)} papers to CSV")
                 except Exception as e:
@@ -285,7 +284,7 @@ class AutomatedCollectionOrchestrator:
                     topic.name, essential_papers
                 )
                 self.mdbook_manager.update_summary(relative_path, topic.name)
-                
+
                 result["page_created"] = True
                 self.logger.info(f"Updated mdbook monthly page for topic: {topic.name}")
 
@@ -347,7 +346,7 @@ def main():
     """Main entry point for the automated collection script."""
     # Get current date for reporting
     current_date = datetime.now().date()
-    
+
     try:
         # Initialize and run orchestrator
         orchestrator = AutomatedCollectionOrchestrator()

@@ -2,12 +2,13 @@
 Configuration management utilities.
 """
 
-import yaml
-from pathlib import Path
-from typing import List, Dict, Any
 import logging
+from pathlib import Path
+from typing import Any, cast
 
-from ..models import TopicConfig, GitHubConfig, ScoringWeights, SystemConfig
+import yaml
+
+from ..models import GitHubConfig, ScoringWeights, SystemConfig, TopicConfig
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class ConfigurationManager:
         self.topics_file = self.config_dir / "topics.yaml"
         self.settings_file = self.config_dir / "settings.yaml"
 
-    def load_topics(self) -> List[TopicConfig]:
+    def load_topics(self) -> list[TopicConfig]:
         """Load topic configurations from YAML file.
 
         Returns:
@@ -140,7 +141,7 @@ class ConfigurationManager:
         config_email = pubmed_data.get("email")
 
         if config_email and config_email != "pubmed.miner@example.com":
-            return config_email
+            return str(config_email)
 
         # Default fallback
         logger.warning("PubMed email not configured - using default")
@@ -242,7 +243,7 @@ class ConfigurationManager:
                 )
             logger.info(f"Created default settings file: {self.settings_file}")
 
-    def _load_settings(self) -> Dict[str, Any]:
+    def _load_settings(self) -> dict[str, Any]:
         """Load settings from YAML file.
 
         Returns:
@@ -261,14 +262,14 @@ class ConfigurationManager:
             logger.error(f"Error loading settings file: {e}")
             return {}
 
-    def _load_cache_settings(self) -> Dict[str, Any]:
+    def _load_cache_settings(self) -> dict[str, Any]:
         """Load cache-related settings.
 
         Returns:
             Dictionary with cache settings
         """
         settings = self._load_settings()
-        return settings.get(
+        cache_settings = settings.get(
             "cache_settings",
             {
                 "citation_cache_days": 7,
@@ -276,8 +277,9 @@ class ConfigurationManager:
                 "paper_metadata_cache_days": 30,
             },
         )
+        return cast(dict[str, Any], cache_settings)
 
-    def update_topic(self, topic_name: str, **kwargs) -> None:
+    def update_topic(self, topic_name: str, **kwargs: Any) -> None:
         """Update a specific topic configuration.
 
         Args:
@@ -291,7 +293,7 @@ class ConfigurationManager:
         for i, topic in enumerate(topics):
             if topic.name == topic_name:
                 # Create updated topic
-                topic_dict = {
+                topic_dict: dict[str, Any] = {
                     "name": topic.name,
                     "query": topic.query,
                     "max_papers": topic.max_papers,

@@ -10,10 +10,11 @@ scripts_dir = Path(__file__).parent.parent / "scripts"
 if str(scripts_dir) not in sys.path:
     sys.path.insert(0, str(scripts_dir))
 
-import pytest
-import tempfile
 import os
+import tempfile
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture
@@ -111,6 +112,7 @@ def no_github_token():
 def sample_papers():
     """Create sample Paper objects for testing."""
     from datetime import datetime
+
     from src.pubmed_miner.models import Paper
 
     papers = [
@@ -174,10 +176,12 @@ def sample_scored_papers(sample_papers):
 @pytest.fixture
 def mock_requests():
     """Mock requests library for API testing."""
-    with pytest.mock.patch("requests.get") as mock_get:
-        with pytest.mock.patch("requests.post") as mock_post:
-            with pytest.mock.patch("requests.patch") as mock_patch:
-                yield {"get": mock_get, "post": mock_post, "patch": mock_patch}
+    with (
+        pytest.mock.patch("requests.get") as mock_get,
+        pytest.mock.patch("requests.post") as mock_post,
+        pytest.mock.patch("requests.patch") as mock_patch,
+    ):
+        yield {"get": mock_get, "post": mock_post, "patch": mock_patch}
 
 
 @pytest.fixture

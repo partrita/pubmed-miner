@@ -2,12 +2,13 @@
 Unit tests for GitHubIssuesManager.
 """
 
-import pytest
-from unittest.mock import Mock, patch
 from datetime import datetime
+from unittest.mock import Mock, patch
 
+import pytest
+
+from src.pubmed_miner.models import GitHubConfig, ScoredPaper
 from src.pubmed_miner.services.github_manager import GitHubIssuesManager
-from src.pubmed_miner.models import ScoredPaper, GitHubConfig
 from src.pubmed_miner.utils.error_handler import GitHubError
 
 
@@ -72,7 +73,7 @@ class TestGitHubIssuesManager:
         assert result["mock_mode"] is True
         assert result["created"] is True
         assert "number" in result
-        current_date = datetime.now().strftime('%Y-%m-%d')
+        current_date = datetime.now().strftime("%Y-%m-%d")
         assert result["title"] == f"{current_date}: test-topic papers"
         assert "html_url" in result
         assert "body" in result
@@ -126,11 +127,14 @@ class TestGitHubIssuesManager:
     def test_find_existing_issue_api_error(self, mock_get):
         """Test API error when finding existing issue."""
         from requests.exceptions import HTTPError
+
         mock_response = Mock()
         mock_response.status_code = 404
         mock_response.text = "Not Found"
         # raise_for_status raises HTTPError when called
-        mock_response.raise_for_status.side_effect = HTTPError("404 Client Error: Not Found")
+        mock_response.raise_for_status.side_effect = HTTPError(
+            "404 Client Error: Not Found"
+        )
         mock_get.return_value = mock_response
 
         with pytest.raises(GitHubError, match="404 Client Error"):
@@ -149,7 +153,9 @@ class TestGitHubIssuesManager:
         mock_response.raise_for_status = Mock()  # no exception
         mock_post.return_value = mock_response
 
-        issue = self.api_manager._create_issue("2025-10-02: test-topic papers", "Issue body content")
+        issue = self.api_manager._create_issue(
+            "2025-10-02: test-topic papers", "Issue body content"
+        )
 
         assert issue["number"] == 43
         assert issue["title"] == "2025-10-02: test-topic papers"
@@ -195,8 +201,8 @@ class TestGitHubIssuesManager:
         assert "John Doe" in body
         assert "Nature Medicine" in body
         assert "- **PMID:** 12345" in body
-        assert "Score: 95.5" in body
-        assert "Rank #1" in body
+        assert "- **Score:** 95.5" in body
+        assert "- **Rank:** #1" in body
 
         # Check markdown formatting
         assert "## Essential Papers for test-topic" in body
@@ -231,7 +237,7 @@ class TestGitHubIssuesManager:
         assert result["created"] is True
         assert result["number"] == 43
         assert result["mock_mode"] is True
-        current_date = datetime.now().strftime('%Y-%m-%d')
+        current_date = datetime.now().strftime("%Y-%m-%d")
         mock_find.assert_called_once_with("test-topic", current_date)
         mock_create.assert_called_once()
 
@@ -240,7 +246,7 @@ class TestGitHubIssuesManager:
     def test_create_or_update_issue_existing(self, mock_update, mock_find):
         """Test updating an existing issue."""
         # Mock existing issue
-        current_date = datetime.now().strftime('%Y-%m-%d')
+        current_date = datetime.now().strftime("%Y-%m-%d")
         mock_find.return_value = {
             "number": 42,
             "title": f"{current_date}: test-topic papers",
@@ -266,7 +272,11 @@ class TestGitHubIssuesManager:
             mock_find.return_value = None
 
             with patch.object(self.manager, "_create_issue") as mock_create:
-                mock_create.return_value = {"number": 43, "created": True, "mock_mode": True}
+                mock_create.return_value = {
+                    "number": 43,
+                    "created": True,
+                    "mock_mode": True,
+                }
 
                 result = self.manager.create_or_update_issue("test-topic", [])
 
@@ -336,10 +346,13 @@ class TestGitHubIssuesManager:
     def test_get_repository_info_not_found(self, mock_get):
         """Test getting repository info when repo doesn't exist."""
         from requests.exceptions import HTTPError
+
         mock_response = Mock()
         mock_response.status_code = 404
         mock_response.text = "Not Found"
-        mock_response.raise_for_status.side_effect = HTTPError("404 Client Error: Not Found")
+        mock_response.raise_for_status.side_effect = HTTPError(
+            "404 Client Error: Not Found"
+        )
         mock_get.return_value = mock_response
 
         with pytest.raises(GitHubError, match="404 Client Error"):
@@ -403,6 +416,7 @@ class TestGitHubIssuesManager:
     def test_rate_limiting_handling(self):
         """Test GitHub API rate limiting handling."""
         from requests.exceptions import HTTPError
+
         with patch("src.pubmed_miner.services.github_manager.requests.get") as mock_get:
             # Mock rate limit response
             mock_response = Mock()
@@ -427,6 +441,7 @@ class TestGitHubIssuesManager:
     def test_authentication_error(self):
         """Test handling of authentication errors."""
         from requests.exceptions import HTTPError
+
         with patch("src.pubmed_miner.services.github_manager.requests.get") as mock_get:
             mock_response = Mock()
             mock_response.status_code = 401
@@ -484,10 +499,16 @@ class TestGitHubIssuesManager:
 
         def create_issue(topic):
             try:
-                with patch.object(self.manager, "find_existing_issue_for_date") as mock_find:
+                with patch.object(
+                    self.manager, "find_existing_issue_for_date"
+                ) as mock_find:
                     mock_find.return_value = None
                     with patch.object(self.manager, "_create_issue") as mock_create:
-                        mock_create.return_value = {"number": 42, "created": True, "mock_mode": True}
+                        mock_create.return_value = {
+                            "number": 42,
+                            "created": True,
+                            "mock_mode": True,
+                        }
                         result = self.manager.create_or_update_issue(
                             topic, self.sample_papers
                         )

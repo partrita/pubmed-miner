@@ -2,13 +2,14 @@
 Unit tests for CitationService.
 """
 
+from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
+
 import pytest
 import requests
-from unittest.mock import Mock, patch
-from datetime import datetime, timedelta
 
-from src.pubmed_miner.services.citation_service import CitationService
 from src.pubmed_miner.models.cache import CitationCache
+from src.pubmed_miner.services.citation_service import CitationService
 
 
 class TestCitationService:
@@ -35,8 +36,12 @@ class TestCitationService:
         with patch.object(self.service.cache_manager, "get_citation") as mock_cache_get:
             mock_cache_get.return_value = None
 
-            with patch.object(self.service.cache_manager, "save_citation") as mock_cache_save:
-                count = self.service.get_citation_count("12345", doi="10.1038/nature12345")
+            with patch.object(
+                self.service.cache_manager, "save_citation"
+            ) as mock_cache_save:
+                count = self.service.get_citation_count(
+                    "12345", doi="10.1038/nature12345"
+                )
 
                 assert count == 150
                 mock_cache_save.assert_called_once()
@@ -156,7 +161,7 @@ class TestCitationService:
         mock_response.status_code = 429
         mock_response.headers = {"Retry-After": "60"}
         mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            "429 Too Many Requests"
+            "429 Too Many Requests", response=mock_response
         )
         mock_get.return_value = mock_response
 
@@ -184,18 +189,30 @@ class TestCitationService:
         with patch(
             "src.pubmed_miner.services.citation_service.BioEntrez"
         ) as mock_entrez:
-            mock_handle = Mock()
-            mock_handle.read.return_value = b"""<?xml version="1.0" ?>
-            <PubmedArticleSet>
-                <PubmedArticle>
-                    <PubmedData>
-                        <ArticleIdList>
-                            <ArticleId IdType="doi">10.1038/nature12345</ArticleId>
-                        </ArticleIdList>
-                    </PubmedData>
-                </PubmedArticle>
-            </PubmedArticleSet>"""
-            mock_efetch.return_value = mock_handle
+            search_handle = Mock()
+            fetch_handle = Mock()
+            mock_entrez.esearch.return_value = search_handle
+            mock_entrez.efetch.return_value = fetch_handle
+
+            # First Entrez.read call parses esearch results,
+            # second parses efetch results.
+            mock_entrez.read.side_effect = [
+                {"IdList": [{"Id": "12345"}]},
+                {
+                    "PubmedArticleSet": [
+                        {
+                            "PubmedData": {
+                                "ArticleIdList": [
+                                    {
+                                        "IdType": "doi",
+                                        "Id": "10.1038/nature12345",
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+            ]
 
             doi = self.service._get_doi_from_pmid("12345")
             assert doi == "10.1038/nature12345"
@@ -203,19 +220,12 @@ class TestCitationService:
     def test_pmid_to_doi_lookup_no_doi(self):
         """Test PMID to DOI lookup when no DOI is found."""
         with patch(
-            "src.pubmed_miner.services.citation_service.Entrez.efetch"
-        ) as mock_efetch:
-            mock_handle = Mock()
-            mock_handle.read.return_value = b"""<?xml version="1.0" ?>
-            <PubmedArticleSet>
-                <PubmedArticle>
-                    <PubmedData>
-                        <ArticleIdList>
-                        </ArticleIdList>
-                    </PubmedData>
-                </PubmedArticle>
-            </PubmedArticleSet>"""
-            mock_efetch.return_value = mock_handle
+            "src.pubmed_miner.services.citation_service.BioEntrez"
+        ) as mock_entrez:
+            search_handle = Mock()
+            mock_entrez.esearch.return_value = search_handle
+            # Empty search result -> no DOI can be looked up
+            mock_entrez.read.return_value = {"IdList": []}
 
             doi = self.service._get_doi_from_pmid("12345")
             assert doi is None
@@ -259,9 +269,7 @@ class TestCitationService:
 
     def test_clear_expired_cache(self):
         """Test clearing expired cache entries."""
-        with patch.object(
-            self.service.cache_manager, "clear_expired"
-        ) as mock_clear:
+        with patch.object(self.service.cache_manager, "clear_expired") as mock_clear:
             mock_clear.return_value = 5
 
             cleared_count = self.service.clear_expired_cache()
@@ -319,8 +327,15 @@ class TestCitationService:
         with patch(
             "src.pubmed_miner.services.citation_service.requests.get"
         ) as mock_get:
+            # Both providers fail on the first attempt, Crossref succeeds
+            # on the retry.
             failure_response = Mock()
             failure_response.status_code = 500
+            failure_response.raise_for_status.side_effect = (
+                requests.exceptions.HTTPError(
+                    "500 Server Error", response=failure_response
+                )
+            )
 
             success_response = Mock()
             success_response.status_code = 200
@@ -328,7 +343,11 @@ class TestCitationService:
                 "message": {"is-referenced-by-count": 100}
             }
 
-            mock_get.side_effect = [failure_response, success_response]
+            mock_get.side_effect = [
+                failure_response,
+                failure_response,
+                success_response,
+            ]
 
             with patch.object(
                 self.service.cache_manager, "get_citation"
@@ -337,7 +356,9 @@ class TestCitationService:
 
                 count = self.service.get_citation_count("12345", doi="10.1038/test")
                 assert count == 100
-                assert mock_get.call_count == 2
+                # Attempt 1: Crossref + Semantic Scholar both fail,
+                # attempt 2: Crossref succeeds -> 3 calls total.
+                assert mock_get.call_count == 3
 
     def test_malformed_api_response(self):
         """Test handling of malformed API responses."""

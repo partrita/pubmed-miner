@@ -77,7 +77,7 @@ jobs:
     
     - name: Run automated collection
       env:
-        PUBMED_EMAIL: ${{ secrets.PUBMED_EMAIL || 'partrita@gmail.com' }}
+        PUBMED_EMAIL: ${{ secrets.PUBMED_EMAIL || 'pubmed.miner@example.com' }}
         LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTOR: ${{ github.actor }}

@@ -9,45 +9,44 @@ Requirements addressed:
 - 4.4: Workflow error handling and logging
 """
 
-import time
 import logging
+import time
 import traceback
-from typing import Callable, Any, Optional, Dict, List
-from functools import wraps
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
+from functools import wraps
+from typing import Any, TypeVar, cast
 
 logger = logging.getLogger(__name__)
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 class PubMedMinerError(Exception):
     """Base exception for PubMed Miner errors."""
 
-    pass
 
 
 class APIError(PubMedMinerError):
     """Exception raised for API-related errors."""
 
-    pass
 
 
 class DataError(PubMedMinerError):
     """Exception raised for data validation or processing errors."""
 
-    pass
 
 
 class ConfigurationError(PubMedMinerError):
     """Exception raised for configuration-related errors."""
 
-    pass
 
 
 class RateLimitError(APIError):
     """Exception raised when API rate limits are exceeded."""
 
-    def __init__(self, message: str, retry_after: Optional[int] = None):
+    def __init__(self, message: str, retry_after: int | None = None):
         super().__init__(message)
         self.retry_after = retry_after
 
@@ -55,19 +54,17 @@ class RateLimitError(APIError):
 class NetworkError(APIError):
     """Exception raised for network connectivity issues."""
 
-    pass
 
 
 class AuthenticationError(APIError):
     """Exception raised for authentication/authorization issues."""
 
-    pass
 
 
 class ValidationError(DataError):
     """Exception raised for data validation failures."""
 
-    def __init__(self, message: str, field: Optional[str] = None, value: Any = None):
+    def __init__(self, message: str, field: str | None = None, value: Any = None):
         super().__init__(message)
         self.field = field
         self.value = value
@@ -76,13 +73,12 @@ class ValidationError(DataError):
 class CacheError(PubMedMinerError):
     """Exception raised for cache-related errors."""
 
-    pass
 
 
 class GitHubError(APIError):
     """Exception raised for GitHub API-related errors."""
 
-    def __init__(self, message: str, status_code: Optional[int] = None):
+    def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)
         self.status_code = status_code
 
@@ -90,13 +86,11 @@ class GitHubError(APIError):
 class PubMedError(APIError):
     """Exception raised for PubMed API-related errors."""
 
-    pass
 
 
 class ScoringError(DataError):
     """Exception raised for scoring calculation errors."""
 
-    pass
 
 
 class ErrorSeverity(Enum):
@@ -111,11 +105,11 @@ class ErrorSeverity(Enum):
 class ErrorHandler:
     """Comprehensive error handler with retry logic, fallback strategies, and monitoring."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize error handler with tracking capabilities."""
-        self.error_counts: Dict[str, int] = {}
-        self.last_errors: Dict[str, datetime] = {}
-        self.circuit_breakers: Dict[str, bool] = {}
+        self.error_counts: dict[str, int] = {}
+        self.last_errors: dict[str, datetime] = {}
+        self.circuit_breakers: dict[str, bool] = {}
 
     def handle_api_error(
         self,
@@ -295,7 +289,7 @@ class ErrorHandler:
         """Reset circuit breaker for a given context."""
         self.circuit_breakers[context] = False
 
-    def get_error_summary(self) -> Dict[str, Any]:
+    def get_error_summary(self) -> dict[str, Any]:
         """Get summary of tracked errors."""
         return {
             "error_counts": dict(self.error_counts),
@@ -315,9 +309,9 @@ class ErrorHandler:
         max_attempts: int = 3,
         delay: float = 1.0,
         backoff_factor: float = 2.0,
-        exceptions: tuple = (APIError, RateLimitError),
+        exceptions: tuple[type[BaseException], ...] = (APIError, RateLimitError),
         jitter: bool = True,
-    ):
+    ) -> Callable[[F], F]:
         """Decorator to retry function calls on specific exceptions with enhanced strategies.
 
         Args:
@@ -328,12 +322,12 @@ class ErrorHandler:
             jitter: Whether to add random jitter to delay times
         """
 
-        def decorator(func: Callable) -> Callable:
+        def decorator(func: F) -> F:
             @wraps(func)
-            def wrapper(*args, **kwargs) -> Any:
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
                 import random
 
-                last_exception = None
+                last_exception: BaseException | None = None
                 current_delay = delay
 
                 for attempt in range(max_attempts):
@@ -349,12 +343,12 @@ class ErrorHandler:
 
                             # Handle rate limit errors specially
                             if isinstance(e, RateLimitError) and e.retry_after:
-                                sleep_time = e.retry_after
+                                sleep_time = float(e.retry_after)
                                 logger.info(
                                     f"Rate limited, waiting {sleep_time} seconds as requested..."
                                 )
                             else:
-                                sleep_time = current_delay
+                                sleep_time = float(current_delay)
                                 if jitter:
                                     # Add ±25% jitter to prevent thundering herd
                                     jitter_range = sleep_time * 0.25
@@ -372,9 +366,13 @@ class ErrorHandler:
                             )
 
                 # Re-raise the last exception if all attempts failed
-                raise last_exception
+                if last_exception is not None:
+                    raise last_exception
+                raise APIError(
+                    f"All {max_attempts} attempts failed for {func.__name__}"
+                )
 
-            return wrapper
+            return cast(F, wrapper)
 
         return decorator
 
@@ -382,8 +380,8 @@ class ErrorHandler:
     def circuit_breaker(
         failure_threshold: int = 5,
         recovery_timeout: int = 60,
-        expected_exception: type = APIError,
-    ):
+        expected_exception: type[APIError] = APIError,
+    ) -> Callable[[F], F]:
         """Decorator implementing circuit breaker pattern.
 
         Args:
@@ -392,12 +390,16 @@ class ErrorHandler:
             expected_exception: Exception type that triggers circuit breaker
         """
 
-        def decorator(func: Callable) -> Callable:
+        def decorator(func: F) -> F:
             # Circuit breaker state
-            state = {"failures": 0, "last_failure": None, "is_open": False}
+            state: dict[str, Any] = {
+                "failures": 0,
+                "last_failure": None,
+                "is_open": False,
+            }
 
             @wraps(func)
-            def wrapper(*args, **kwargs) -> Any:
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
                 now = datetime.now()
 
                 # Check if circuit should be reset
@@ -435,7 +437,7 @@ class ErrorHandler:
 
                     raise
 
-            return wrapper
+            return cast(F, wrapper)
 
         return decorator
 
@@ -478,7 +480,7 @@ class ErrorHandler:
         data: Any,
         validator: Callable[[Any], bool],
         error_message: str = "Data validation failed",
-        field_name: Optional[str] = None,
+        field_name: str | None = None,
     ) -> None:
         """Validate data and raise ValidationError if validation fails.
 
@@ -501,12 +503,12 @@ class ErrorHandler:
 
     @staticmethod
     def batch_execute(
-        items: List[Any],
+        items: list[Any],
         func: Callable[[Any], Any],
-        max_failures: Optional[int] = None,
+        max_failures: int | None = None,
         continue_on_error: bool = True,
         context: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute a function on a batch of items with error tracking.
 
         Args:
@@ -570,7 +572,9 @@ def get_error_handler() -> ErrorHandler:
 
 
 # Convenience decorators for common retry patterns
-def retry_api_calls(max_attempts: int = 3, delay: float = 1.0, jitter: bool = True):
+def retry_api_calls(
+    max_attempts: int = 3, delay: float = 1.0, jitter: bool = True
+) -> Callable[[F], F]:
     """Decorator for retrying API calls with intelligent backoff."""
     return ErrorHandler.retry_on_failure(
         max_attempts=max_attempts,
@@ -580,14 +584,18 @@ def retry_api_calls(max_attempts: int = 3, delay: float = 1.0, jitter: bool = Tr
     )
 
 
-def retry_data_operations(max_attempts: int = 2, delay: float = 0.5):
+def retry_data_operations(
+    max_attempts: int = 2, delay: float = 0.5
+) -> Callable[[F], F]:
     """Decorator for retrying data operations."""
     return ErrorHandler.retry_on_failure(
         max_attempts=max_attempts, delay=delay, exceptions=(DataError, ValidationError)
     )
 
 
-def retry_github_operations(max_attempts: int = 3, delay: float = 2.0):
+def retry_github_operations(
+    max_attempts: int = 3, delay: float = 2.0
+) -> Callable[[F], F]:
     """Decorator for retrying GitHub API operations."""
     return ErrorHandler.retry_on_failure(
         max_attempts=max_attempts,
@@ -596,7 +604,9 @@ def retry_github_operations(max_attempts: int = 3, delay: float = 2.0):
     )
 
 
-def retry_pubmed_operations(max_attempts: int = 4, delay: float = 1.0):
+def retry_pubmed_operations(
+    max_attempts: int = 4, delay: float = 1.0
+) -> Callable[[F], F]:
     """Decorator for retrying PubMed API operations."""
     return ErrorHandler.retry_on_failure(
         max_attempts=max_attempts,
@@ -607,12 +617,12 @@ def retry_pubmed_operations(max_attempts: int = 4, delay: float = 1.0):
 
 def handle_exceptions(
     default_return: Any = None, log_errors: bool = True, context: str = ""
-):
+) -> Callable[[F], F]:
     """Decorator to handle all exceptions and return a default value."""
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             return ErrorHandler.safe_execute(
                 lambda: func(*args, **kwargs),
                 default_return=default_return,
@@ -620,12 +630,14 @@ def handle_exceptions(
                 context=context,
             )
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def circuit_breaker_api(failure_threshold: int = 5, recovery_timeout: int = 60):
+def circuit_breaker_api(
+    failure_threshold: int = 5, recovery_timeout: int = 60
+) -> Callable[[F], F]:
     """Circuit breaker decorator for API operations."""
     return ErrorHandler.circuit_breaker(
         failure_threshold=failure_threshold,
@@ -634,12 +646,12 @@ def circuit_breaker_api(failure_threshold: int = 5, recovery_timeout: int = 60):
     )
 
 
-def validate_required_fields(required_fields: List[str]):
+def validate_required_fields(required_fields: list[str]) -> Callable[[F], F]:
     """Decorator to validate required fields in data objects."""
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Check if first argument has required fields
             if args and hasattr(args[0], "__dict__"):
                 obj = args[0]
@@ -650,17 +662,19 @@ def validate_required_fields(required_fields: List[str]):
                         )
             return func(*args, **kwargs)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def log_execution_time(logger_instance: Optional[logging.Logger] = None):
+def log_execution_time(
+    logger_instance: logging.Logger | None = None,
+) -> Callable[[F], F]:
     """Decorator to log function execution time."""
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
             log = logger_instance or logger
 
@@ -676,6 +690,6 @@ def log_execution_time(logger_instance: Optional[logging.Logger] = None):
                 )
                 raise
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator

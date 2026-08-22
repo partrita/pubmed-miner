@@ -2,24 +2,21 @@
 GitHub Issues management service.
 """
 
+import logging
+import os
 import re
 import time
-import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import List, Dict, Optional, Any, Tuple, Union
+from typing import Any, cast
 
 import requests
 from requests.exceptions import HTTPError
 
-from ..models import ScoredPaper, GitHubConfig
+from ..models import GitHubConfig, ScoredPaper
+from ..utils.error_handler import GitHubError
 
 logger = logging.getLogger(__name__)
-
-
-class GitHubError(Exception):
-    """Exception for GitHub API errors."""
-
-    pass
 
 
 class GitHubIssuesManager:
@@ -27,8 +24,8 @@ class GitHubIssuesManager:
 
     def __init__(
         self,
-        config: Optional[GitHubConfig] = None,
-        token: Optional[str] = None,
+        config: GitHubConfig | None = None,
+        token: str | None = None,
         mock_mode: bool = False,
     ):
         """Initialize the GitHub issues manager.
@@ -39,12 +36,20 @@ class GitHubIssuesManager:
             mock_mode: If True, operate in mock mode without API calls
         """
         self.logger = logging.getLogger(__name__)
+
+        if config is None:
+            # Fall back to environment variables (useful in CI) with
+            # mock-safe defaults when they are unavailable.
+            config = GitHubConfig(
+                token=os.getenv("GITHUB_TOKEN", "mock_token_for_local_testing"),
+                repository=os.getenv("GITHUB_REPOSITORY", "mock/mock"),
+            )
         self.config = config
         self.token = token
         self.mock_mode = mock_mode
         self._rate_limit_remaining = 5000
         self._rate_limit_reset = 0
-        self._last_request_time = 0
+        self._last_request_time = 0.0
         self._min_request_interval = 1.0
         self.headers = {
             "Accept": "application/vnd.github.v3+json",
@@ -56,15 +61,13 @@ class GitHubIssuesManager:
             self.headers["Authorization"] = f"token {token}"
             self.logger.info("GitHub token configured")
 
-        if not config:
-            config = GitHubConfig()
-            self.config = config
-
-        if not self.token and self.config:
+        if not self.token:
             self.token = self.config.token
 
         # Auto-detect mock mode: when token is absent or is a placeholder/local-testing token
-        if mock_mode is not True and (not self.token or str(self.token).startswith("mock_token")):
+        if mock_mode is not True and (
+            not self.token or str(self.token).startswith("mock_token")
+        ):
             self.mock_mode = True
 
         if self.mock_mode:
@@ -82,8 +85,8 @@ class GitHubIssuesManager:
         self._stats_errors = 0
 
     def create_issue(
-        self, title: str, body: str, labels: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        self, title: str, body: str, labels: list[str] | None = None
+    ) -> dict[str, Any]:
         """Create a new GitHub issue.
 
         Args:
@@ -102,8 +105,8 @@ class GitHubIssuesManager:
         return self._create_issue_api(title, body, labels)
 
     def _mock_create_issue(
-        self, title: str, body: str, labels: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        self, title: str, body: str, labels: list[str] | None = None
+    ) -> dict[str, Any]:
         """Create a mock issue for testing.
 
         Args:
@@ -130,8 +133,8 @@ class GitHubIssuesManager:
         return result
 
     def _create_issue_api(
-        self, title: str, body: str, labels: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        self, title: str, body: str, labels: list[str] | None = None
+    ) -> dict[str, Any]:
         """Create an issue via GitHub API.
 
         Args:
@@ -148,18 +151,16 @@ class GitHubIssuesManager:
         self._rate_limit_check()
 
         url = f"{self.base_url}/repos/{self.config.repository}/issues"
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "title": title,
             "body": body,
             "labels": labels if labels else ["essential-papers"],
         }
 
         try:
-            response = requests.post(
-                url, headers=self.headers, json=data, timeout=30
-            )
+            response = requests.post(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
-            issue = response.json()
+            issue = cast(dict[str, Any], response.json())
             self._stats_issues_created += 1
             self._stats_api_calls += 1
             self.logger.info(f"Created issue: #{issue['number']}")
@@ -173,96 +174,7 @@ class GitHubIssuesManager:
             self._stats_api_calls += 1
             raise GitHubError(f"Failed to create issue: {e}")
 
-    def update_issue(
-        self, issue_number: int, title: str, body: str
-    ) -> Dict[str, Any]:
-        """Update an existing GitHub issue.
-
-        Args:
-            issue_number: Issue number to update
-            title: New title
-            body: New body content
-
-        Returns:
-            Updated issue data
-
-        Raises:
-            GitHubError: If update fails
-        """
-        if self.mock_mode:
-            return self._mock_update_issue(issue_number, title, body)
-        return self._update_issue_api(issue_number, title, body)
-
-    def _mock_update_issue(
-        self, issue_number: int, title: str, body: str
-    ) -> Dict[str, Any]:
-        """Update a mock issue.
-
-        Args:
-            issue_number: Issue number
-            title: New title
-            body: New body content
-
-        Returns:
-            Mock issue data
-        """
-        result = {
-            "number": issue_number,
-            "title": title,
-            "body": body,
-            "state": "open",
-            "html_url": f"https://github.com/{self.config.repository}/issues/{issue_number}",
-            "updated_at": datetime.now().isoformat(),
-            "mock_mode": True,
-        }
-        self._stats_issues_updated += 1
-        self.logger.debug(f"Mock issue updated: #{issue_number}")
-        return result
-
-    def _update_issue_api(
-        self, issue_number: int, title: str, body: str
-    ) -> Dict[str, Any]:
-        """Update an issue via GitHub API.
-
-        Args:
-            issue_number: Issue number
-            title: New title
-            body: New body content
-
-        Returns:
-            Updated issue data
-
-        Raises:
-            GitHubError: If API call fails
-        """
-        self._rate_limit_check()
-
-        url = f"{self.base_url}/repos/{self.config.repository}/issues/{issue_number}"
-        data: Dict[str, Any] = {
-            "title": title,
-            "body": body,
-        }
-
-        try:
-            response = requests.patch(
-                url, headers=self.headers, json=data, timeout=30
-            )
-            response.raise_for_status()
-            issue = response.json()
-            self._stats_issues_updated += 1
-            self._stats_api_calls += 1
-            self.logger.info(f"Updated issue: #{issue_number}")
-            return issue
-        except HTTPError as e:
-            self._stats_errors += 1
-            self._stats_api_calls += 1
-            raise GitHubError(f"Failed to update issue: {e}")
-        except Exception as e:
-            self._stats_errors += 1
-            self._stats_api_calls += 1
-            raise GitHubError(f"Failed to update issue: {e}")
-
-    def close_issue(self, issue_number: int) -> Dict[str, Any]:
+    def close_issue(self, issue_number: int) -> dict[str, Any]:
         """Close a GitHub issue.
 
         Args:
@@ -278,7 +190,7 @@ class GitHubIssuesManager:
             return self._mock_close_issue(issue_number)
         return self._close_issue_api(issue_number)
 
-    def _mock_close_issue(self, issue_number: int) -> Dict[str, Any]:
+    def _mock_close_issue(self, issue_number: int) -> dict[str, Any]:
         """Close a mock issue.
 
         Args:
@@ -297,7 +209,7 @@ class GitHubIssuesManager:
         self.logger.debug(f"Mock issue closed: #{issue_number}")
         return result
 
-    def _close_issue_api(self, issue_number: int) -> Dict[str, Any]:
+    def _close_issue_api(self, issue_number: int) -> dict[str, Any]:
         """Close an issue via GitHub API.
 
         Args:
@@ -312,14 +224,12 @@ class GitHubIssuesManager:
         self._rate_limit_check()
 
         url = f"{self.base_url}/repos/{self.config.repository}/issues/{issue_number}"
-        data: Dict[str, Any] = {"state": "closed"}
+        data: dict[str, Any] = {"state": "closed"}
 
         try:
-            response = requests.patch(
-                url, headers=self.headers, json=data, timeout=30
-            )
+            response = requests.patch(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
-            issue = response.json()
+            issue = cast(dict[str, Any], response.json())
             self._stats_issues_updated += 1
             self._stats_api_calls += 1
             self.logger.info(f"Closed issue: #{issue_number}")
@@ -333,7 +243,7 @@ class GitHubIssuesManager:
             self._stats_api_calls += 1
             raise GitHubError(f"Failed to close issue: {e}")
 
-    def reopen_issue(self, issue_number: int) -> Dict[str, Any]:
+    def reopen_issue(self, issue_number: int) -> dict[str, Any]:
         """Reopen a closed GitHub issue.
 
         Args:
@@ -349,7 +259,7 @@ class GitHubIssuesManager:
             return self._mock_reopen_issue(issue_number)
         return self._reopen_issue_api(issue_number)
 
-    def _mock_reopen_issue(self, issue_number: int) -> Dict[str, Any]:
+    def _mock_reopen_issue(self, issue_number: int) -> dict[str, Any]:
         """Reopen a mock issue.
 
         Args:
@@ -368,7 +278,7 @@ class GitHubIssuesManager:
         self.logger.debug(f"Mock issue reopened: #{issue_number}")
         return result
 
-    def _reopen_issue_api(self, issue_number: int) -> Dict[str, Any]:
+    def _reopen_issue_api(self, issue_number: int) -> dict[str, Any]:
         """Reopen an issue via GitHub API.
 
         Args:
@@ -383,14 +293,12 @@ class GitHubIssuesManager:
         self._rate_limit_check()
 
         url = f"{self.base_url}/repos/{self.config.repository}/issues/{issue_number}"
-        data: Dict[str, Any] = {"state": "open"}
+        data: dict[str, Any] = {"state": "open"}
 
         try:
-            response = requests.patch(
-                url, headers=self.headers, json=data, timeout=30
-            )
+            response = requests.patch(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
-            issue = response.json()
+            issue = cast(dict[str, Any], response.json())
             self._stats_issues_updated += 1
             self._stats_api_calls += 1
             self.logger.info(f"Reopened issue: #{issue_number}")
@@ -404,9 +312,7 @@ class GitHubIssuesManager:
             self._stats_api_calls += 1
             raise GitHubError(f"Failed to reopen issue: {e}")
 
-    def add_comment_to_issue(
-        self, issue_number: int, comment: str
-    ) -> Dict[str, Any]:
+    def add_comment_to_issue(self, issue_number: int, comment: str) -> dict[str, Any]:
         """Add a comment to a GitHub issue.
 
         Args:
@@ -423,9 +329,7 @@ class GitHubIssuesManager:
             return self._mock_add_comment(issue_number, comment)
         return self._add_comment_api(issue_number, comment)
 
-    def _mock_add_comment(
-        self, issue_number: int, comment: str
-    ) -> Dict[str, Any]:
+    def _mock_add_comment(self, issue_number: int, comment: str) -> dict[str, Any]:
         """Add a mock comment.
 
         Args:
@@ -446,9 +350,7 @@ class GitHubIssuesManager:
         self.logger.debug(f"Mock comment added to issue #{issue_number}")
         return result
 
-    def _add_comment_api(
-        self, issue_number: int, comment: str
-    ) -> Dict[str, Any]:
+    def _add_comment_api(self, issue_number: int, comment: str) -> dict[str, Any]:
         """Add a comment via GitHub API.
 
         Args:
@@ -464,14 +366,12 @@ class GitHubIssuesManager:
         self._rate_limit_check()
 
         url = f"{self.base_url}/repos/{self.config.repository}/issues/{issue_number}/comments"
-        data: Dict[str, Any] = {"body": comment}
+        data: dict[str, Any] = {"body": comment}
 
         try:
-            response = requests.post(
-                url, headers=self.headers, json=data, timeout=30
-            )
+            response = requests.post(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
-            comment_data = response.json()
+            comment_data = cast(dict[str, Any], response.json())
             self._stats_comments_added += 1
             self._stats_api_calls += 1
             self.logger.info(f"Added comment to issue #{issue_number}")
@@ -486,8 +386,8 @@ class GitHubIssuesManager:
             raise GitHubError(f"Failed to add comment: {e}")
 
     def add_labels_to_issue(
-        self, issue_number: int, labels: List[str]
-    ) -> Dict[str, Any]:
+        self, issue_number: int, labels: list[str]
+    ) -> dict[str, Any]:
         """Add labels to a GitHub issue.
 
         Args:
@@ -504,9 +404,7 @@ class GitHubIssuesManager:
             return self._mock_add_labels(issue_number, labels)
         return self._add_labels_api(issue_number, labels)
 
-    def _mock_add_labels(
-        self, issue_number: int, labels: List[str]
-    ) -> Dict[str, Any]:
+    def _mock_add_labels(self, issue_number: int, labels: list[str]) -> dict[str, Any]:
         """Add mock labels.
 
         Args:
@@ -526,9 +424,7 @@ class GitHubIssuesManager:
         self.logger.debug(f"Mock labels added to issue #{issue_number}")
         return result
 
-    def _add_labels_api(
-        self, issue_number: int, labels: List[str]
-    ) -> Dict[str, Any]:
+    def _add_labels_api(self, issue_number: int, labels: list[str]) -> dict[str, Any]:
         """Add labels via GitHub API.
 
         Args:
@@ -546,11 +442,9 @@ class GitHubIssuesManager:
         url = f"{self.base_url}/repos/{self.config.repository}/issues/{issue_number}/labels"
 
         try:
-            response = requests.post(
-                url, headers=self.headers, json=labels, timeout=30
-            )
+            response = requests.post(url, headers=self.headers, json=labels, timeout=30)
             response.raise_for_status()
-            label_data = response.json()
+            label_data = cast(dict[str, Any], response.json())
             self._stats_issues_updated += 1
             self._stats_api_calls += 1
             self.logger.info(f"Added labels to issue #{issue_number}")
@@ -565,8 +459,8 @@ class GitHubIssuesManager:
             raise GitHubError(f"Failed to add labels: {e}")
 
     def remove_labels_from_issue(
-        self, issue_number: int, labels: List[str]
-    ) -> Dict[str, Any]:
+        self, issue_number: int, labels: list[str]
+    ) -> dict[str, Any]:
         """Remove labels from a GitHub issue.
 
         Args:
@@ -584,8 +478,8 @@ class GitHubIssuesManager:
         return self._remove_labels_api(issue_number, labels)
 
     def _mock_remove_labels(
-        self, issue_number: int, labels: List[str]
-    ) -> Dict[str, Any]:
+        self, issue_number: int, labels: list[str]
+    ) -> dict[str, Any]:
         """Remove mock labels.
 
         Args:
@@ -606,8 +500,8 @@ class GitHubIssuesManager:
         return result
 
     def _remove_labels_api(
-        self, issue_number: int, labels: List[str]
-    ) -> Dict[str, Any]:
+        self, issue_number: int, labels: list[str]
+    ) -> dict[str, Any]:
         """Remove labels via GitHub API.
 
         Args:
@@ -642,7 +536,7 @@ class GitHubIssuesManager:
             self._stats_api_calls += 1
             raise GitHubError(f"Failed to remove labels: {e}")
 
-    def get_issue(self, issue_number: int) -> Dict[str, Any]:
+    def get_issue(self, issue_number: int) -> dict[str, Any]:
         """Get a GitHub issue by number.
 
         Args:
@@ -658,7 +552,7 @@ class GitHubIssuesManager:
             return self._mock_get_issue(issue_number)
         return self._get_issue_api(issue_number)
 
-    def _mock_get_issue(self, issue_number: int) -> Dict[str, Any]:
+    def _mock_get_issue(self, issue_number: int) -> dict[str, Any]:
         """Get a mock issue.
 
         Args:
@@ -678,7 +572,7 @@ class GitHubIssuesManager:
         self._stats_api_calls += 1
         return result
 
-    def _get_issue_api(self, issue_number: int) -> Dict[str, Any]:
+    def _get_issue_api(self, issue_number: int) -> dict[str, Any]:
         """Get an issue via GitHub API.
 
         Args:
@@ -695,11 +589,9 @@ class GitHubIssuesManager:
         url = f"{self.base_url}/repos/{self.config.repository}/issues/{issue_number}"
 
         try:
-            response = requests.get(
-                url, headers=self.headers, timeout=30
-            )
+            response = requests.get(url, headers=self.headers, timeout=30)
             response.raise_for_status()
-            issue = response.json()
+            issue = cast(dict[str, Any], response.json())
             self._stats_api_calls += 1
             return issue
         except HTTPError as e:
@@ -708,6 +600,7 @@ class GitHubIssuesManager:
             status = getattr(getattr(e, "response", None), "status_code", None)
             if status is None:
                 import re
+
                 m = re.search(r"(\d{3})", str(e))
                 if m:
                     status = int(m.group(1))
@@ -723,7 +616,7 @@ class GitHubIssuesManager:
 
     def list_issues_for_topic(
         self, topic: str, state: str = "all"
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List GitHub issues filtered by topic label.
 
         Args:
@@ -740,9 +633,7 @@ class GitHubIssuesManager:
             return self._mock_list_issues(topic, state)
         return self._list_issues_api(topic, state)
 
-    def _mock_list_issues(
-        self, topic: str, state: str = "all"
-    ) -> List[Dict[str, Any]]:
+    def _mock_list_issues(self, topic: str, state: str = "all") -> list[dict[str, Any]]:
         """List mock issues.
 
         Args:
@@ -766,9 +657,7 @@ class GitHubIssuesManager:
         self._stats_api_calls += 1
         return issues
 
-    def _list_issues_api(
-        self, topic: str, state: str = "all"
-    ) -> List[Dict[str, Any]]:
+    def _list_issues_api(self, topic: str, state: str = "all") -> list[dict[str, Any]]:
         """List issues via GitHub API.
 
         Args:
@@ -784,7 +673,7 @@ class GitHubIssuesManager:
         self._rate_limit_check()
 
         url = f"{self.base_url}/repos/{self.config.repository}/issues"
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "state": state,
             "labels": f"topic-{topic}",
             "per_page": 100,
@@ -795,7 +684,7 @@ class GitHubIssuesManager:
                 url, headers=self.headers, params=params, timeout=30
             )
             response.raise_for_status()
-            issues = response.json()
+            issues = cast(list[dict[str, Any]], response.json())
             self._stats_api_calls += 1
             # Defense: filter by the requested topic label even if server did
             topic_label = f"topic-{topic}"
@@ -807,6 +696,7 @@ class GitHubIssuesManager:
             status = getattr(getattr(e, "response", None), "status_code", None)
             if status is None:
                 import re
+
                 m = re.search(r"(\d{3})", str(e))
                 if m:
                     status = int(m.group(1))
@@ -820,7 +710,7 @@ class GitHubIssuesManager:
             self._stats_api_calls += 1
             raise GitHubError(f"Failed to list issues: {e}")
 
-    def get_repository_info(self) -> Dict[str, Any]:
+    def get_repository_info(self) -> dict[str, Any]:
         """Get repository information from GitHub.
 
         Returns:
@@ -833,7 +723,7 @@ class GitHubIssuesManager:
             return self._mock_get_repository_info()
         return self._get_repository_info_api()
 
-    def _mock_get_repository_info(self) -> Dict[str, Any]:
+    def _mock_get_repository_info(self) -> dict[str, Any]:
         """Get mock repository info.
 
         Returns:
@@ -849,7 +739,7 @@ class GitHubIssuesManager:
         self._stats_api_calls += 1
         return result
 
-    def _get_repository_info_api(self) -> Dict[str, Any]:
+    def _get_repository_info_api(self) -> dict[str, Any]:
         """Get repository info via GitHub API.
 
         Returns:
@@ -864,16 +754,12 @@ class GitHubIssuesManager:
         self.logger.info(f"Fetching repository info via API: {url}")
 
         try:
-            response = requests.get(
-                url, headers=self.headers, timeout=30
-            )
+            response = requests.get(url, headers=self.headers, timeout=30)
             self._stats_api_calls += 1
-            self.logger.info(
-                f"Repository info API response: {response.status_code}"
-            )
+            self.logger.info(f"Repository info API response: {response.status_code}")
             response.raise_for_status()
-            repo_data = response.json()
-            self.logger.info(f"Successfully fetched repository info")
+            repo_data = cast(dict[str, Any], response.json())
+            self.logger.info("Successfully fetched repository info")
             return repo_data
         except HTTPError as e:
             self._stats_errors += 1
@@ -881,6 +767,7 @@ class GitHubIssuesManager:
             status = getattr(getattr(e, "response", None), "status_code", None)
             if status is None:
                 import re
+
                 m = re.search(r"(\d{3})", str(e))
                 if m:
                     status = int(m.group(1))
@@ -916,22 +803,20 @@ class GitHubIssuesManager:
             url = f"{self.base_url}/rate_limit"
             response = requests.get(url, headers=self.headers, timeout=10)
             if response.status_code == 200:
-                data = response.json()
-                self._rate_limit_remaining = data.get("resources", {}).get(
-                    "core", {}
-                ).get("remaining", 5000)
-                self._rate_limit_reset = data.get("resources", {}).get(
-                    "core", {}
-                ).get("reset", 0)
+                data = cast(dict[str, Any], response.json())
+                self._rate_limit_remaining = (
+                    data.get("resources", {}).get("core", {}).get("remaining", 5000)
+                )
+                self._rate_limit_reset = (
+                    data.get("resources", {}).get("core", {}).get("reset", 0)
+                )
                 return True
             return False
         except Exception as e:
             self.logger.error(f"GitHub access validation failed: {e}")
             return False
 
-    def validate_and_sanitize_topic(
-        self, topic: str
-    ) -> Tuple[str, str]:
+    def validate_and_sanitize_topic(self, topic: str) -> tuple[str, str]:
         """Validate and sanitize a topic name.
 
         Args:
@@ -985,9 +870,7 @@ class GitHubIssuesManager:
             sanitized = "untitled"
         return sanitized
 
-    def _format_issue_body(
-        self, topic: str, papers: List[ScoredPaper]
-    ) -> str:
+    def _format_issue_body(self, topic: str, papers: list[ScoredPaper]) -> str:
         """Format issue body with paper list.
 
         Args:
@@ -1015,9 +898,7 @@ class GitHubIssuesManager:
 
         return body
 
-    def _format_paper_summary(
-        self, paper: ScoredPaper, rank: int
-    ) -> str:
+    def _format_paper_summary(self, paper: ScoredPaper, rank: int) -> str:
         """Format a paper summary for issue body.
 
         Args:
@@ -1032,11 +913,23 @@ class GitHubIssuesManager:
             f"- **PMID:** {paper.pmid}\n"
             f"- **Authors:** {', '.join(paper.authors) if paper.authors else 'Unknown'}\n"
             f"- **Journal:** {paper.journal}"
-            + (f" (IF: {paper.impact_factor:.1f})" if paper.impact_factor is not None else "")
+            + (
+                f" (IF: {paper.impact_factor:.1f})"
+                if paper.impact_factor is not None
+                else ""
+            )
             + "\n"
-            + (f"- **Published:** {paper.publication_date.strftime('%Y-%m-%d')}\n" if paper.publication_date else "")
+            + (
+                f"- **Published:** {paper.publication_date.strftime('%Y-%m-%d')}\n"
+                if paper.publication_date
+                else ""
+            )
             + f"- **Score:** {paper.score:.1f}\n"
-            + (f"- **Citations:** {paper.citation_count}\n" if paper.citation_count is not None else "")
+            + (
+                f"- **Citations:** {paper.citation_count}\n"
+                if paper.citation_count is not None
+                else ""
+            )
             + f"- **Rank:** #{rank}\n"
             + f"[PubMed](https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/)\n"
             + "\n"
@@ -1044,8 +937,8 @@ class GitHubIssuesManager:
         return summary
 
     def create_or_update_issue(
-        self, topic: str, papers: List[ScoredPaper]
-    ) -> Dict[str, Any]:
+        self, topic: str, papers: list[ScoredPaper]
+    ) -> dict[str, Any]:
         """Create or update a GitHub issue for a topic.
 
         Args:
@@ -1059,23 +952,19 @@ class GitHubIssuesManager:
             GitHubError: If operation fails
             ValueError: If topic is invalid
         """
-        validated_topic, sanitized_topic = self.validate_and_sanitize_topic(topic)
+        _, sanitized_topic = self.validate_and_sanitize_topic(topic)
 
         date_str = datetime.now().strftime("%Y-%m-%d")
         issue_title = f"{date_str}: {sanitized_topic} papers"
 
-        existing_issue = self.find_existing_issue_for_date(
-            sanitized_topic, date_str
-        )
+        existing_issue = self.find_existing_issue_for_date(sanitized_topic, date_str)
 
         if existing_issue:
             self.logger.info(
                 f"Updating existing issue #{existing_issue['number']} for {topic}"
             )
             issue_body = self._format_issue_body(topic, papers)
-            updated = self._update_issue(
-                existing_issue, papers
-            )
+            updated = self._update_issue(existing_issue, papers)
             self._stats_issues_updated += 1
             return updated
 
@@ -1086,8 +975,8 @@ class GitHubIssuesManager:
         return created
 
     def find_existing_issue_for_date(
-        self, topic: str, date_str: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, topic: str, date_str: str | None = None
+    ) -> dict[str, Any] | None:
         """Find an existing issue for a topic on a specific date.
 
         Args:
@@ -1102,8 +991,8 @@ class GitHubIssuesManager:
         return self._find_existing_issue_api(topic, date_str)
 
     def _mock_find_existing_issue(
-        self, topic: str, date_str: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, topic: str, date_str: str | None = None
+    ) -> dict[str, Any] | None:
         """Find mock existing issue.
 
         Args:
@@ -1116,13 +1005,13 @@ class GitHubIssuesManager:
         self._stats_api_calls += 1
         return None
 
-    def find_existing_issue(self, topic: str) -> Optional[Dict[str, Any]]:
+    def find_existing_issue(self, topic: str) -> dict[str, Any] | None:
         """Find an existing issue for a topic (mock-safe public entry)."""
         if self.mock_mode:
             return None
         return self._find_existing_issue(topic)
 
-    def _find_existing_issue(self, topic: str) -> Optional[Dict[str, Any]]:
+    def _find_existing_issue(self, topic: str) -> dict[str, Any] | None:
         """Find an existing issue by topic (API, with error translation)."""
         try:
             return self._find_existing_issue_api(topic, None)
@@ -1130,8 +1019,8 @@ class GitHubIssuesManager:
             raise GitHubError(str(e))
 
     def _find_existing_issue_api(
-        self, topic: str, date_str: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, topic: str, date_str: str | None = None
+    ) -> dict[str, Any] | None:
         """Find existing issue via GitHub API.
 
         Args:
@@ -1143,9 +1032,8 @@ class GitHubIssuesManager:
         """
         self._rate_limit_check()
 
-        search_term = f"[{self.config.issue_prefix}] {topic}"
         url = f"{self.base_url}/repos/{self.config.repository}/issues"
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "state": "all",
             "per_page": 100,
         }
@@ -1155,7 +1043,7 @@ class GitHubIssuesManager:
                 url, headers=self.headers, params=params, timeout=30
             )
             response.raise_for_status()
-            issues = response.json()
+            issues = cast(list[dict[str, Any]], response.json())
             self._stats_api_calls += 1
 
             for issue in issues:
@@ -1169,6 +1057,7 @@ class GitHubIssuesManager:
             if status is None:
                 # Fallback: try to parse status from exception string (e.g. "403 Forbidden")
                 import re as _re
+
                 m = _re.search(r"(\d{3})\s", str(e))
                 if m:
                     status = int(m.group(1))
@@ -1182,9 +1071,7 @@ class GitHubIssuesManager:
             self._stats_api_calls += 1
             raise GitHubError(f"Failed to search for existing issues: {e}")
 
-    def _create_issue(
-        self, title: str, body: str
-    ) -> Dict[str, Any]:
+    def _create_issue(self, title: str, body: str) -> dict[str, Any]:
         """Create a GitHub issue.
 
         Args:
@@ -1201,9 +1088,7 @@ class GitHubIssuesManager:
             return self._mock_create_issue_inner(title, body)
         return self._create_issue_api_inner(title, body)
 
-    def _mock_create_issue_inner(
-        self, title: str, body: str
-    ) -> Dict[str, Any]:
+    def _mock_create_issue_inner(self, title: str, body: str) -> dict[str, Any]:
         """Create a mock issue.
 
         Args:
@@ -1226,9 +1111,7 @@ class GitHubIssuesManager:
         self.logger.debug(f"Mock issue created: {title}")
         return issue_data
 
-    def _create_issue_api_inner(
-        self, title: str, body: str
-    ) -> Dict[str, Any]:
+    def _create_issue_api_inner(self, title: str, body: str) -> dict[str, Any]:
         """Create an issue via GitHub API.
 
         Args:
@@ -1244,18 +1127,16 @@ class GitHubIssuesManager:
         self._rate_limit_check()
 
         url = f"{self.base_url}/repos/{self.config.repository}/issues"
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "title": title,
             "body": body,
             "labels": [self.config.issue_prefix.lower(), "automated"],
         }
 
         try:
-            response = requests.post(
-                url, headers=self.headers, json=data, timeout=30
-            )
+            response = requests.post(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
-            issue = response.json()
+            issue = cast(dict[str, Any], response.json())
             self._stats_issues_created += 1
             self._stats_api_calls += 1
             self.logger.info(f"Created issue: #{issue['number']}")
@@ -1271,9 +1152,9 @@ class GitHubIssuesManager:
 
     def _update_issue(
         self,
-        target: Union[int, Dict[str, Any]],
-        papers: List[ScoredPaper],
-    ) -> Dict[str, Any]:
+        target: int | dict[str, Any],
+        papers: list[ScoredPaper],
+    ) -> dict[str, Any]:
         """Update an existing GitHub issue.
 
         Args:
@@ -1291,8 +1172,8 @@ class GitHubIssuesManager:
         return self._update_issue_api(target, papers)
 
     def _mock_update_issue(
-        self, target: Union[int, Dict[str, Any]], papers: List[ScoredPaper]
-    ) -> Dict[str, Any]:
+        self, target: int | dict[str, Any], papers: list[ScoredPaper]
+    ) -> dict[str, Any]:
         """Update a mock issue.
 
         Args:
@@ -1305,15 +1186,11 @@ class GitHubIssuesManager:
         if isinstance(target, dict):
             issue = target
         else:
-            existing = self.find_existing_issue_for_date(
-                "", None
-            )
+            existing = self.find_existing_issue_for_date("", None)
             issue = existing if existing else {"number": target, "title": ""}
         updated_issue = issue.copy()
         updated_issue["body"] = self._format_issue_body(
-            updated_issue.get("title", "").replace(
-                self.config.issue_prefix + "] ", ""
-            ),
+            updated_issue.get("title", "").replace(self.config.issue_prefix + "] ", ""),
             papers,
         )
         updated_issue["updated_at"] = datetime.now().isoformat()
@@ -1324,8 +1201,8 @@ class GitHubIssuesManager:
         return updated_issue
 
     def _update_issue_api(
-        self, target: Union[int, Dict[str, Any]], papers: List[ScoredPaper]
-    ) -> Dict[str, Any]:
+        self, target: int | dict[str, Any], papers: list[ScoredPaper]
+    ) -> dict[str, Any]:
         """Update an issue via GitHub API.
 
         Args:
@@ -1350,16 +1227,14 @@ class GitHubIssuesManager:
         topic_name = title.replace(f"[{self.config.issue_prefix}] ", "")
         body = self._format_issue_body(topic_name, papers)
         url = f"{self.base_url}/repos/{self.config.repository}/issues/{issue_number}"
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "title": title,
             "body": body,
         }
         try:
-            response = requests.patch(
-                url, headers=self.headers, json=data, timeout=30
-            )
+            response = requests.patch(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
-            updated_issue = response.json()
+            updated_issue = cast(dict[str, Any], response.json())
             self._stats_issues_updated += 1
             self._stats_api_calls += 1
             self.logger.info(f"Updated issue: #{issue_number}")
@@ -1374,8 +1249,8 @@ class GitHubIssuesManager:
             raise GitHubError(f"Failed to update issue: {e}")
 
     def _update_issue_api_inner(
-        self, issue: Dict[str, Any], papers: List[ScoredPaper]
-    ) -> Dict[str, Any]:
+        self, issue: dict[str, Any], papers: list[ScoredPaper]
+    ) -> dict[str, Any]:
         """Update an issue via GitHub API (legacy inner)."""
         self._rate_limit_check()
 
@@ -1389,17 +1264,15 @@ class GitHubIssuesManager:
         body = self._format_issue_body(topic_name, papers)
 
         url = f"{self.base_url}/repos/{self.config.repository}/issues/{issue_number}"
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "title": issue.get("title", ""),
             "body": body,
         }
 
         try:
-            response = requests.patch(
-                url, headers=self.headers, json=data, timeout=30
-            )
+            response = requests.patch(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
-            updated_issue = response.json()
+            updated_issue = cast(dict[str, Any], response.json())
             self._stats_issues_updated += 1
             self._stats_api_calls += 1
             self.logger.info(f"Updated issue: #{issue_number}")
@@ -1427,17 +1300,19 @@ class GitHubIssuesManager:
 
         self._last_request_time = time.time()
 
-        if self._rate_limit_remaining < 100 and self._rate_limit_remaining > 0:
-            if self._rate_limit_reset > current_time:
-                sleep_time = self._rate_limit_reset - current_time + 1
-                if not self.mock_mode:
-                    time.sleep(sleep_time)
-                self.logger.warning(
-                    f"Rate limit low ({self._rate_limit_remaining}), "
-                    f"sleeping {sleep_time:.1f}s"
-                )
+        if (
+            0 < self._rate_limit_remaining < 100
+            and self._rate_limit_reset > current_time
+        ):
+            sleep_time = self._rate_limit_reset - current_time + 1
+            if not self.mock_mode:
+                time.sleep(sleep_time)
+            self.logger.warning(
+                f"Rate limit low ({self._rate_limit_remaining}), "
+                f"sleeping {sleep_time:.1f}s"
+            )
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get statistics for GitHub operations.
 
         Returns:
@@ -1455,7 +1330,7 @@ class GitHubIssuesManager:
             "mock_mode": self.mock_mode,
         }
 
-    def get_statistics_summary(self) -> Dict[str, Any]:
+    def get_statistics_summary(self) -> dict[str, Any]:
         """Get a summary of statistics.
 
         Returns:
@@ -1470,7 +1345,7 @@ class GitHubIssuesManager:
             "repository": self.config.repository if self.config else None,
         }
 
-    def close_issue_by_number(self, issue_number: int) -> Dict[str, Any]:
+    def close_issue_by_number(self, issue_number: int) -> dict[str, Any]:
         """Close an issue by its number.
 
         Args:
@@ -1484,7 +1359,7 @@ class GitHubIssuesManager:
         """
         return self.close_issue(issue_number)
 
-    def reopen_issue_by_number(self, issue_number: int) -> Dict[str, Any]:
+    def reopen_issue_by_number(self, issue_number: int) -> dict[str, Any]:
         """Reopen an issue by its number.
 
         Args:
@@ -1499,7 +1374,7 @@ class GitHubIssuesManager:
         return self.reopen_issue(issue_number)
 
     def retry_with_delay(
-        self, func, *args, max_retries: int = 3, **kwargs
+        self, func: Callable[..., Any], *args: Any, max_retries: int = 3, **kwargs: Any
     ) -> Any:
         """Retry a function with exponential backoff.
 

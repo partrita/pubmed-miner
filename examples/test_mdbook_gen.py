@@ -4,7 +4,6 @@ Local testing script for MdBook integration.
 This demonstrates how to use the system locally to generate mdbook content.
 """
 
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -79,7 +78,7 @@ def test_mdbook_generation():
     # Create sample papers
     papers = create_sample_papers()
     print(f"📄 Sample Papers Created: {len(papers)}")
-    
+
     # Test creating monthly page
     print("🚀 Testing Monthly Page Creation...")
     try:
@@ -88,7 +87,7 @@ def test_mdbook_generation():
 
         print("✅ Success! Page Updated/Created:")
         print(f"   Path: {relative_path}")
-        
+
         full_path = mdbook_manager.src_dir / relative_path
         if full_path.exists():
             print(f"   File exists at: {full_path}")
@@ -105,16 +104,16 @@ def test_mdbook_generation():
     print("\n📚 Testing Summary Update...")
     try:
         mdbook_manager.update_summary(relative_path, topic)
-        
+
         if mdbook_manager.summary_path.exists():
-            print(f"✅ SUMMARY.md updated")
-            with open(mdbook_manager.summary_path, 'r') as f:
+            print("✅ SUMMARY.md updated")
+            with open(mdbook_manager.summary_path, "r") as f:
                 content = f.read()
                 print("   Preview of SUMMARY.md:")
                 print("-" * 40)
-                print("\n".join(content.splitlines()[-5:])) # Show last 5 lines
+                print("\n".join(content.splitlines()[-5:]))  # Show last 5 lines
                 print("-" * 40)
-                
+
             if relative_path in content:
                 print("   Link successfully added to summary")
             else:

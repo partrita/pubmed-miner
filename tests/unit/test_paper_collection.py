@@ -2,11 +2,11 @@
 Unit tests for PaperCollectionService.
 """
 
-import io
-import pytest
-from unittest.mock import Mock, patch
 from datetime import datetime
+from unittest.mock import Mock, patch
 from xml.etree import ElementTree as ET
+
+import pytest
 
 from src.pubmed_miner.services.paper_collection import PaperCollectionService
 from src.pubmed_miner.utils.error_handler import APIError
@@ -37,7 +37,9 @@ def _parse_efetch_xml(xml_bytes):
             continue
         pmid = medline.findtext("PMID", default="")
         article = medline.find("Article")
-        title = article.findtext("ArticleTitle", default="") if article is not None else ""
+        title = (
+            article.findtext("ArticleTitle", default="") if article is not None else ""
+        )
         authors = []
         author_list = article.find("AuthorList") if article is not None else None
         if author_list is not None:
@@ -48,15 +50,19 @@ def _parse_efetch_xml(xml_bytes):
                     authors.append(f"{fore} {last}")
                 elif last:
                     authors.append(last)
-        journal = article.findtext("Journal/Title", default="") if article is not None else ""
+        journal = (
+            article.findtext("Journal/Title", default="") if article is not None else ""
+        )
         date_elem = article.find("ArticleDate") if article is not None else None
-        year = int(date_elem.findtext("Year", "2000")) if date_elem is not None else 2000
+        year = (
+            int(date_elem.findtext("Year", "2000")) if date_elem is not None else 2000
+        )
         month = int(date_elem.findtext("Month", "1")) if date_elem is not None else 1
         day = int(date_elem.findtext("Day", "1")) if date_elem is not None else 1
-        from datetime import datetime as dt
-        pub_date = dt(year, month, day)
         abstract = ""
-        abstract_elem = article.find("Abstract/AbstractText") if article is not None else None
+        abstract_elem = (
+            article.find("Abstract/AbstractText") if article is not None else None
+        )
         if abstract_elem is not None:
             abstract = abstract_elem.text or ""
         doi = ""
@@ -67,25 +73,43 @@ def _parse_efetch_xml(xml_bytes):
                     doi = aid.text or ""
                     break
         # Build nested dict matching Entrez.read() output structure
-        articles.append({
-            "MedlineCitation": {
-                "PMID": pmid,
-                "Article": {
-                    "ArticleTitle": title,
-                    "AuthorList": [{"LastName": a.split()[-1] if " " in a else a,
-                                     "ForeName": " ".join(a.split()[:-1]) if " " in a else ""}
-                                    if a else {} for a in authors] if authors else [],
-                    "Journal": {"Title": journal},
-                    "ArticleDate": {"Year": str(year), "Month": str(month), "Day": str(day)},
-                    "Abstract": {"AbstractText": abstract},
+        articles.append(
+            {
+                "MedlineCitation": {
+                    "PMID": pmid,
+                    "Article": {
+                        "ArticleTitle": title,
+                        "AuthorList": (
+                            [
+                                (
+                                    {
+                                        "LastName": a.split()[-1] if " " in a else a,
+                                        "ForeName": (
+                                            " ".join(a.split()[:-1]) if " " in a else ""
+                                        ),
+                                    }
+                                    if a
+                                    else {}
+                                )
+                                for a in authors
+                            ]
+                            if authors
+                            else []
+                        ),
+                        "Journal": {"Title": journal},
+                        "ArticleDate": {
+                            "Year": str(year),
+                            "Month": str(month),
+                            "Day": str(day),
+                        },
+                        "Abstract": {"AbstractText": abstract},
+                    },
                 },
-            },
-            "PubmedData": {
-                "ArticleIdList": [
-                    {"IdType": "doi", "value": doi}
-                ] if doi else []
-            },
-        })
+                "PubmedData": {
+                    "ArticleIdList": [{"IdType": "doi", "value": doi}] if doi else []
+                },
+            }
+        )
     return {"PubmedArticle": articles}
 
 
@@ -96,9 +120,7 @@ def _make_esearch_handle(pmids):
         '<!DOCTYPE eSearchResult PUBLIC "-//NLM//NLM E-utilities customize//EN" '
         '"https://www.ncbi.nlm.nih.gov/entrez/query/static/eSearchResult.dtd">\n'
         "<eSearchResult>"
-        "<IdList>"
-        + "".join(f"<Id>{pmid}</Id>" for pmid in pmids)
-        + "</IdList>"
+        "<IdList>" + "".join(f"<Id>{pmid}</Id>" for pmid in pmids) + "</IdList>"
         "</eSearchResult>"
     )
     return Mock(
@@ -238,7 +260,7 @@ class TestPaperCollectionService:
             "</MedlineCitation>"
             "<PubmedData>"
             "<ArticleIdList>"
-            "<ArticleId IdType=\"doi\">10.1038/test.2023.12345</ArticleId>"
+            '<ArticleId IdType="doi">10.1038/test.2023.12345</ArticleId>'
             "</ArticleIdList>"
             "</PubmedData>"
             "</PubmedArticle>"
@@ -285,18 +307,22 @@ class TestPaperCollectionService:
         with pytest.raises(APIError, match="Failed to fetch paper details"):
             self.service.get_paper_details(["12345"])
 
+    @patch("src.pubmed_miner.services.paper_collection.Entrez")
     @patch("src.pubmed_miner.services.paper_collection.time.sleep")
-    def test_rate_limiting(self, mock_sleep):
+    def test_rate_limiting(self, mock_sleep, mock_entrez):
         """Test rate limiting functionality."""
         service = PaperCollectionService(rate_limit=1.0)
 
-        with patch.object(service, "search_papers") as mock_request:
-            mock_request.return_value = []
+        mock_handle = Mock()
+        mock_entrez.esearch.return_value = mock_handle
+        mock_entrez.read.return_value = {"IdList": []}
 
-            service.search_papers("test1")
-            service.search_papers("test2")
+        service.search_papers("test1")
+        service.search_papers("test2")
 
-            assert mock_sleep.call_count >= 1
+        # The second call happens sooner than the 1 request/second interval,
+        # so rate limiting must have kicked in.
+        assert mock_sleep.call_count >= 1
 
     def test_parse_authors_various_formats(self):
         """Test author parsing with various formats."""

@@ -2,20 +2,25 @@
 Integration tests for the complete workflow.
 """
 
-import pytest
 import tempfile
-import yaml
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
-from datetime import datetime
 
-from src.pubmed_miner.utils.config_manager import ConfigurationManager
-from src.pubmed_miner.services.paper_collection import PaperCollectionService
-from src.pubmed_miner.services.citation_service import CitationService
-from src.pubmed_miner.services.impact_factor_service import ImpactFactorService
+import pytest
+import yaml
+
+from src.pubmed_miner.models import GitHubConfig, Paper, ScoredPaper, TopicConfig
 from src.pubmed_miner.scoring.engine import ScoringEngine
+from src.pubmed_miner.services.citation_service import CitationService
 from src.pubmed_miner.services.github_manager import GitHubIssuesManager
-from src.pubmed_miner.models import Paper, ScoredPaper, TopicConfig, GitHubConfig
+from src.pubmed_miner.services.impact_factor_service import ImpactFactorService
+from src.pubmed_miner.services.paper_collection import PaperCollectionService
+from src.pubmed_miner.utils.config_manager import ConfigurationManager
+
+
+class SimulatedAPIFailure(Exception):
+    """Simulated API failure used by workflow integration tests."""
 
 
 class TestWorkflowIntegration:
@@ -267,7 +272,7 @@ class TestWorkflowIntegration:
                         if pmid == "12345":
                             return 100
                         else:
-                            raise Exception("Citation API error")
+                            raise SimulatedAPIFailure("Citation API error")
 
                     mock_citations.side_effect = citation_side_effect
 
@@ -487,43 +492,42 @@ class TestWorkflowIntegration:
         # Test that cache is properly used across services
         with patch.object(
             self.citation_service.cache_manager, "get_citation"
-        ) as mock_cache_get:
-            with patch.object(
-                self.citation_service.cache_manager, "save_citation"
-            ) as mock_cache_save:
-                # First call - cache miss
-                mock_cache_get.return_value = None
+        ) as mock_cache_get, patch.object(
+            self.citation_service.cache_manager, "save_citation"
+        ) as mock_cache_save:
+            # First call - cache miss
+            mock_cache_get.return_value = None
 
-                with patch(
-                    "src.pubmed_miner.services.citation_service.requests.get"
-                ) as mock_requests:
-                    mock_response = Mock()
-                    mock_response.status_code = 200
-                    mock_response.json.return_value = {
-                        "message": {"is-referenced-by-count": 100}
-                    }
-                    mock_requests.return_value = mock_response
+            with patch(
+                "src.pubmed_miner.services.citation_service.requests.get"
+            ) as mock_requests:
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json.return_value = {
+                    "message": {"is-referenced-by-count": 100}
+                }
+                mock_requests.return_value = mock_response
 
-                    # First call should fetch from API and cache
-                    count1 = self.citation_service.get_citation_count(
-                        "12345", doi="10.1000/test"
-                    )
-                    assert count1 == 100
-                    mock_cache_save.assert_called_once()
-
-                # Second call - cache hit
-                from src.pubmed_miner.models.cache import CitationCache
-
-                cached_citation = CitationCache(
-                    pmid="12345",
-                    citation_count=100,
-                    last_updated=datetime.now(),
-                    source="crossref",
+                # First call should fetch from API and cache
+                count1 = self.citation_service.get_citation_count(
+                    "12345", doi="10.1000/test"
                 )
-                mock_cache_get.return_value = cached_citation
+                assert count1 == 100
+                mock_cache_save.assert_called_once()
 
-                count2 = self.citation_service.get_citation_count("12345")
-                assert count2 == 100
+            # Second call - cache hit
+            from src.pubmed_miner.models.cache import CitationCache
+
+            cached_citation = CitationCache(
+                pmid="12345",
+                citation_count=100,
+                last_updated=datetime.now(),
+                source="crossref",
+            )
+            mock_cache_get.return_value = cached_citation
+
+            count2 = self.citation_service.get_citation_count("12345")
+            assert count2 == 100
                 # Should not make additional API calls
 
     def test_error_propagation_integration(self):

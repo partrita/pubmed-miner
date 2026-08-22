@@ -2,12 +2,10 @@
 MdBook management service.
 """
 
-import logging
-import os
 import html
+import logging
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
 
 from ..models import ScoredPaper
 
@@ -26,11 +24,11 @@ class MdBookManager:
         self.book_root = Path(book_root)
         self.src_dir = self.book_root / "book_src"
         self.summary_path = self.src_dir / "SUMMARY.md"
-        
+
         # Ensure book_src directory exists
         self.src_dir.mkdir(parents=True, exist_ok=True)
 
-    def create_daily_page(self, topic: str, papers: List[ScoredPaper]) -> str:
+    def create_daily_page(self, topic: str, papers: list[ScoredPaper]) -> str:
         """Create a markdown page for the day's papers.
 
         Args:
@@ -44,27 +42,29 @@ class MdBookManager:
         year = current_date.strftime("%Y")
         month = current_date.strftime("%m")
         day = current_date.strftime("%d")
-        
+
         # Create directory structure: book_src/year/month/
         topic_slug = topic.lower().replace(" ", "_")
         daily_dir = self.src_dir / year / month
         daily_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # File name: day_topic.md
         filename = f"{day}_{topic_slug}.md"
         file_path = daily_dir / filename
-        
+
         content = self._format_page_content(topic, papers, current_date)
-        
+
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
-            
+
         logger.info(f"Created daily page: {file_path}")
-        
+
         # Return relative path for SUMMARY.md
         return f"{year}/{month}/{filename}"
 
-    def update_monthly_page(self, topic: str, papers: List[ScoredPaper], date: datetime = None) -> str:
+    def update_monthly_page(
+        self, topic: str, papers: list[ScoredPaper], date: datetime | None = None
+    ) -> str:
         """Update a monthly markdown page with new papers in a table format.
 
         Args:
@@ -79,25 +79,28 @@ class MdBookManager:
         year = current_date.strftime("%Y")
         month = current_date.strftime("%m")
         month_name = current_date.strftime("%B")
-        
+
         # Monthly file: book_src/year/month.md (e.g., book_src/2026/02.md)
         monthly_dir = self.src_dir / year
         monthly_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{month}.md"
         file_path = monthly_dir / filename
-        
+
         # 1. Read existing PMIDs to avoid duplicates
         import re
+
         existing_pmids = set()
         if file_path.exists():
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 # Simple PMID extraction from [PMID](https://pubmed.ncbi.nlm.nih.gov/12345/)
-                existing_pmids = set(re.findall(r'pubmed\.ncbi\.nlm\.nih\.gov/(\d+)/', content))
+                existing_pmids = set(
+                    re.findall(r"pubmed\.ncbi\.nlm\.nih\.gov/(\d+)/", content)
+                )
 
         # 2. Filter out duplicates
         new_papers = [p for p in papers if str(p.pmid) not in existing_pmids]
-        
+
         if not new_papers:
             logger.info(f"No new papers to add for {topic} in {year}-{month}")
             return f"{year}/{filename}"
@@ -121,12 +124,18 @@ class MdBookManager:
                 safe_journal = html.escape(str(paper.journal))
 
                 pmid_link = f'<a href="https://pubmed.ncbi.nlm.nih.gov/{safe_pmid}/" aria-label="View paper {safe_pmid} on PubMed">PMID</a>'
-                doi_link = f', <a href="https://doi.org/{safe_doi}" aria-label="View DOI {safe_doi}">DOI</a>' if paper.doi else ""
-                
+                doi_link = (
+                    f', <a href="https://doi.org/{safe_doi}" aria-label="View DOI {safe_doi}">DOI</a>'
+                    if paper.doi
+                    else ""
+                )
+
                 # Title might contain | character, which breaks MD table
                 safe_title = html.escape(str(paper.title)).replace("|", "\\|")
-                
-                f.write(f"| {date_str} | {safe_topic} | {safe_title} | {safe_journal} | <span class='score-badge' title='Comprehensive score based on citations, journal impact factor, recency, and relevance'>{paper.score:.1f}</span> | {pmid_link}{doi_link} |\n")
+
+                f.write(
+                    f"| {date_str} | {safe_topic} | {safe_title} | {safe_journal} | <span class='score-badge' title='Comprehensive score based on citations, journal impact factor, recency, and relevance'>{paper.score:.1f}</span> | {pmid_link}{doi_link} |\n"
+                )
 
         logger.info(f"Updated monthly page: {file_path}")
         return f"{year}/{filename}"
@@ -140,13 +149,13 @@ class MdBookManager:
         """
         current_date = datetime.now()
         # We want to use monthly pages now
-        is_monthly = relative_path.count('/') == 1 and relative_path.endswith('.md')
+        is_monthly = relative_path.count("/") == 1 and relative_path.endswith(".md")
 
         if is_monthly:
             # Extract month from relative_path (e.g., "2026/02.md")
-            parts = relative_path.split('/')
+            parts = relative_path.split("/")
             year = parts[0]
-            month_num = parts[1].replace('.md', '')
+            month_num = parts[1].replace(".md", "")
             try:
                 dt = datetime.strptime(f"{year}-{month_num}-01", "%Y-%m-%d")
                 current_date = dt
@@ -158,9 +167,8 @@ class MdBookManager:
             date_str = current_date.strftime("%Y-%m-%d")
             link_text = f"{date_str}: {topic}"
 
-            
         new_entry = f"    - [{link_text}]({relative_path})\n"
-        
+
         if not self.summary_path.exists():
             with open(self.summary_path, "w", encoding="utf-8") as f:
                 f.write("# 요약\n\n- [소개](README.md)\n\n# 업데이트\n")
@@ -175,12 +183,12 @@ class MdBookManager:
 
         # Prepare year/month headers
         year_header = f"- [{current_date.year}]()"
-        
+
         content = "".join(lines)
-        
-        # For monthly pages, we don't want topic-level nesting if possible, 
+
+        # For monthly pages, we don't want topic-level nesting if possible,
         # but let's stick to the structure.
-        
+
         if year_header not in content:
             with open(self.summary_path, "a", encoding="utf-8") as f:
                 f.write(f"\n{year_header}\n")
@@ -192,7 +200,9 @@ class MdBookManager:
 
         logger.info("Updated SUMMARY.md")
 
-    def _format_page_content(self, topic: str, papers: List[ScoredPaper], date: datetime) -> str:
+    def _format_page_content(
+        self, topic: str, papers: list[ScoredPaper], date: datetime
+    ) -> str:
         """Format papers list as markdown page.
 
         Args:
@@ -203,8 +213,8 @@ class MdBookManager:
         Returns:
             Markdown formatted content
         """
-        date_str = date.strftime('%Y-%m-%d')
-        
+        date_str = date.strftime("%Y-%m-%d")
+
         lines = [
             f"# {date_str}: {topic}",
             "",
@@ -213,10 +223,10 @@ class MdBookManager:
             "## 중요도별 주요 논문",
             "",
         ]
-        
+
         if not papers:
-             lines.append("오늘 이 주제에 대한 필수 논문을 찾지 못했습니다.")
-             return "\n".join(lines)
+            lines.append("오늘 이 주제에 대한 필수 논문을 찾지 못했습니다.")
+            return "\n".join(lines)
 
         # Sort papers by rank
         sorted_papers = sorted(papers, key=lambda p: p.rank)
@@ -224,35 +234,41 @@ class MdBookManager:
         for paper in sorted_papers:
             # Format paper entry using HTML for better control (optional, but MD is safer for mdbook)
             # We'll use the custom CSS classes we defined
-            
-            lines.append(f'<div class="paper-entry">')
-            lines.append(f'<div class="paper-title">{paper.rank}. {html.escape(paper.title)}</div>')
-            
+
+            lines.append('<div class="paper-entry">')
+            lines.append(
+                f'<div class="paper-title">{paper.rank}. {html.escape(paper.title)}</div>'
+            )
+
             # Authors and Journal info
-            authors = ', '.join(html.escape(a) for a in paper.authors)
-            lines.append(f'<div class="paper-meta">')
+            authors = ", ".join(html.escape(a) for a in paper.authors)
+            lines.append('<div class="paper-meta">')
             lines.append(f"저자: {authors}<br>")
             lines.append(f"저널: {html.escape(paper.journal)}")
-            lines.append('</div>')
+            lines.append("</div>")
             lines.append("")
-            
+
             # Meta info table
-            doi_link = f"[{paper.doi}](https://doi.org/{paper.doi})" if paper.doi else "-"
-            
+            doi_link = (
+                f"[{paper.doi}](https://doi.org/{paper.doi})" if paper.doi else "-"
+            )
+
             lines.append("| 날짜 | PMID | DOI | 점수 (인용/IF) |")
             lines.append("|:---:|:---:|:---:|:---:|")
-            lines.append(f"| {paper.publication_date.strftime('%Y-%m-%d')} | [{paper.pmid}](https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/) | {doi_link} | {paper.score:.1f} ({paper.citation_count}/{paper.impact_factor:.1f}) |")
+            lines.append(
+                f"| {paper.publication_date.strftime('%Y-%m-%d')} | [{paper.pmid}](https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/) | {doi_link} | {paper.score:.1f} ({paper.citation_count}/{paper.impact_factor:.1f}) |"
+            )
             lines.append("")
 
             # Abstract
             if paper.abstract:
-                lines.append(f'<div class="paper-abstract">')
-                lines.append(f"<details><summary>초록</summary>")
+                lines.append('<div class="paper-abstract">')
+                lines.append("<details><summary>초록</summary>")
                 lines.append(f"<p>{html.escape(paper.abstract)}</p>")
-                lines.append(f"</details>")
-                lines.append('</div>')
+                lines.append("</details>")
+                lines.append("</div>")
 
-            lines.append('</div>') # End paper-entry
+            lines.append("</div>")  # End paper-entry
             lines.append("")
 
         return "\n".join(lines)

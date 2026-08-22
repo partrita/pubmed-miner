@@ -9,11 +9,12 @@ Requirements addressed:
 - Configuration file validation and error reporting
 """
 
-import re
 import os
-from typing import Dict, Any, List, Optional, Union, Callable
-from pathlib import Path
+import re
+from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from .error_handler import ValidationError
@@ -23,7 +24,7 @@ class ConfigValidator:
     """Validates configuration files and settings."""
 
     @staticmethod
-    def validate_topic_config(topic_data: Dict[str, Any]) -> List[str]:
+    def validate_topic_config(topic_data: dict[str, Any]) -> list[str]:
         """Validate a single topic configuration.
 
         Args:
@@ -69,14 +70,14 @@ class ConfigValidator:
             and "max_papers" in topic_data
             and isinstance(topic_data["essential_count"], int)
             and isinstance(topic_data["max_papers"], int)
+            and topic_data["essential_count"] > topic_data["max_papers"]
         ):
-            if topic_data["essential_count"] > topic_data["max_papers"]:
-                errors.append("essential_count cannot be greater than max_papers")
+            errors.append("essential_count cannot be greater than max_papers")
 
         return errors
 
     @staticmethod
-    def validate_github_config(github_data: Dict[str, Any]) -> List[str]:
+    def validate_github_config(github_data: dict[str, Any]) -> list[str]:
         """Validate GitHub configuration.
 
         Args:
@@ -116,7 +117,7 @@ class ConfigValidator:
         return errors
 
     @staticmethod
-    def validate_scoring_weights(weights_data: Dict[str, Any]) -> List[str]:
+    def validate_scoring_weights(weights_data: dict[str, Any]) -> list[str]:
         """Validate scoring weights configuration.
 
         Args:
@@ -157,7 +158,7 @@ class ConfigValidator:
         return errors
 
     @staticmethod
-    def validate_file_paths(config_dir: str) -> List[str]:
+    def validate_file_paths(config_dir: str) -> list[str]:
         """Validate that configuration directory and files exist.
 
         Args:
@@ -193,7 +194,7 @@ class DataValidator:
     """Validates data objects and API responses."""
 
     @staticmethod
-    def validate_pmid(pmid: Union[str, int]) -> bool:
+    def validate_pmid(pmid: str | int) -> bool:
         """Validate PubMed ID format.
 
         Args:
@@ -205,17 +206,9 @@ class DataValidator:
         if not pmid:
             return False
 
+        # PMID should be numeric and reasonable length (1-8 digits)
         pmid_str = str(pmid).strip()
-
-        # PMID should be numeric and reasonable length
-        if not pmid_str.isdigit():
-            return False
-
-        # PMIDs are typically 1-8 digits
-        if len(pmid_str) < 1 or len(pmid_str) > 8:
-            return False
-
-        return True
+        return pmid_str.isdigit() and 1 <= len(pmid_str) <= 8
 
     @staticmethod
     def validate_doi(doi: str) -> bool:
@@ -297,7 +290,7 @@ class DataValidator:
         return False
 
     @staticmethod
-    def validate_paper_data(paper_data: Dict[str, Any]) -> List[str]:
+    def validate_paper_data(paper_data: dict[str, Any]) -> list[str]:
         """Validate paper data structure.
 
         Args:
@@ -317,24 +310,20 @@ class DataValidator:
                 errors.append(f"Field '{field}' cannot be empty")
 
         # Validate PMID
-        if "pmid" in paper_data:
-            if not DataValidator.validate_pmid(paper_data["pmid"]):
-                errors.append(f"Invalid PMID format: {paper_data['pmid']}")
+        if "pmid" in paper_data and not DataValidator.validate_pmid(paper_data["pmid"]):
+            errors.append(f"Invalid PMID format: {paper_data['pmid']}")
 
         # Validate DOI if present
-        if "doi" in paper_data and paper_data["doi"]:
-            if not DataValidator.validate_doi(paper_data["doi"]):
-                errors.append(f"Invalid DOI format: {paper_data['doi']}")
+        if paper_data.get("doi") and not DataValidator.validate_doi(paper_data["doi"]):
+            errors.append(f"Invalid DOI format: {paper_data['doi']}")
 
         # Validate publication date if present
-        if "publication_date" in paper_data and paper_data["publication_date"]:
-            if not isinstance(paper_data["publication_date"], datetime):
-                try:
-                    datetime.fromisoformat(str(paper_data["publication_date"]))
-                except ValueError:
-                    errors.append(
-                        f"Invalid publication date format: {paper_data['publication_date']}"
-                    )
+        pub_date = paper_data.get("publication_date")
+        if pub_date and not isinstance(pub_date, datetime):
+            try:
+                datetime.fromisoformat(str(pub_date))
+            except ValueError:
+                errors.append(f"Invalid publication date format: {pub_date}")
 
         # Validate authors list
         if "authors" in paper_data:
@@ -357,7 +346,7 @@ class DataValidator:
         return errors
 
     @staticmethod
-    def validate_citation_count(count: Union[int, str]) -> bool:
+    def validate_citation_count(count: int | str) -> bool:
         """Validate citation count value.
 
         Args:
@@ -373,7 +362,7 @@ class DataValidator:
             return False
 
     @staticmethod
-    def validate_impact_factor(factor: Union[float, str]) -> bool:
+    def validate_impact_factor(factor: float | str) -> bool:
         """Validate impact factor value.
 
         Args:
@@ -389,7 +378,7 @@ class DataValidator:
             return False
 
     @staticmethod
-    def validate_score(score: Union[float, int]) -> bool:
+    def validate_score(score: float) -> bool:
         """Validate scoring value.
 
         Args:
@@ -409,7 +398,7 @@ class EnvironmentValidator:
     """Validates environment variables and system requirements."""
 
     @staticmethod
-    def validate_required_env_vars(required_vars: List[str]) -> List[str]:
+    def validate_required_env_vars(required_vars: list[str]) -> list[str]:
         """Validate that required environment variables are set.
 
         Args:
@@ -425,7 +414,7 @@ class EnvironmentValidator:
         return missing_vars
 
     @staticmethod
-    def validate_github_environment() -> List[str]:
+    def validate_github_environment() -> list[str]:
         """Validate GitHub-related environment variables.
 
         Returns:
@@ -451,7 +440,7 @@ class EnvironmentValidator:
         return errors
 
     @staticmethod
-    def validate_pubmed_environment() -> List[str]:
+    def validate_pubmed_environment() -> list[str]:
         """Validate PubMed-related environment variables.
 
         Returns:
@@ -467,19 +456,13 @@ class EnvironmentValidator:
         return errors
 
     @staticmethod
-    def validate_system_requirements() -> List[str]:
+    def validate_system_requirements() -> list[str]:
         """Validate system requirements and dependencies.
 
         Returns:
             List of validation error messages
         """
         errors = []
-
-        # Check Python version
-        import sys
-
-        if sys.version_info < (3, 8):
-            errors.append(f"Python 3.8+ required, found {sys.version}")
 
         # Check for required directories
         required_dirs = ["logs", "cache"]
@@ -499,7 +482,7 @@ def validate_and_raise(
     data: Any,
     validator: Callable[[Any], bool],
     error_message: str,
-    field_name: Optional[str] = None,
+    field_name: str | None = None,
 ) -> None:
     """Validate data and raise ValidationError if invalid.
 
@@ -517,10 +500,10 @@ def validate_and_raise(
 
 
 def validate_json_structure(
-    data: Dict[str, Any],
-    required_fields: List[str],
-    optional_fields: Optional[List[str]] = None,
-) -> List[str]:
+    data: dict[str, Any],
+    required_fields: list[str],
+    optional_fields: list[str] | None = None,
+) -> list[str]:
     """Validate JSON structure against required and optional fields.
 
     Args:
@@ -543,7 +526,7 @@ def validate_json_structure(
     # Check for unexpected fields
     if optional_fields is not None:
         allowed_fields = set(required_fields + optional_fields)
-        for field in data.keys():
+        for field in data:
             if field not in allowed_fields:
                 errors.append(f"Unexpected field: {field}")
 
@@ -552,8 +535,8 @@ def validate_json_structure(
 
 def sanitize_string(
     value: str,
-    max_length: Optional[int] = None,
-    allowed_chars: Optional[str] = None,
+    max_length: int | None = None,
+    allowed_chars: str | None = None,
     strip_whitespace: bool = True,
 ) -> str:
     """Sanitize and validate string input.
@@ -603,8 +586,7 @@ def normalize_journal_name(journal_name: str) -> str:
     # Remove common prefixes/suffixes
     prefixes_to_remove = ["The ", "A ", "An "]
     for prefix in prefixes_to_remove:
-        if normalized.startswith(prefix):
-            normalized = normalized[len(prefix) :]
+        normalized = normalized.removeprefix(prefix)
 
     # Remove trailing periods and whitespace
     normalized = normalized.rstrip(". ")
@@ -616,10 +598,10 @@ def normalize_journal_name(journal_name: str) -> str:
 
 
 def validate_batch_data(
-    items: List[Dict[str, Any]],
-    validator_func: Callable[[Dict[str, Any]], List[str]],
+    items: list[dict[str, Any]],
+    validator_func: Callable[[dict[str, Any]], list[str]],
     max_errors: int = 10,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Validate a batch of data items.
 
     Args:
@@ -630,7 +612,7 @@ def validate_batch_data(
     Returns:
         Dictionary with validation results
     """
-    results = {
+    results: dict[str, Any] = {
         "valid_items": [],
         "invalid_items": [],
         "total_items": len(items),

@@ -50,7 +50,7 @@
 ## 📦 설치
 
 ### 사전 요구사항
-- Python 3.9 이상
+- Python 3.10 이상
 - Git
 - GitHub 계정 (자동화 기능용)
 
@@ -265,7 +265,7 @@ from pubmed_miner.services.github_manager import GitHubIssuesManager
 config = GitHubConfig(
     token="mock_token_for_local_testing",  # 또는 빈 문자열
     repository="test/repo",
-    issue_labels=["test"]
+    issue_labels=["test"],
 )
 
 manager = GitHubIssuesManager(config)
@@ -497,7 +497,7 @@ A: PubMed: ~초당 3개 요청, GitHub: 시간당 5000개 요청. 시스템에�
 1. 저장소를 포크하고 복제
 2. 개발 환경 설정:
    ```bash
-   uv sync --extra dev --extra test
+   uv sync --all-extras
    uv run pre-commit install
    ```
 3. 모든 것이 작동하는지 테스트 실행:

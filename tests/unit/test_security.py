@@ -1,8 +1,13 @@
-import pytest
-import logging
 import io
-from src.pubmed_miner.models.config import GitHubConfig, SystemConfig, ScoringWeights, TopicConfig
-from src.pubmed_miner.utils.logging_config import setup_logging
+import logging
+
+from src.pubmed_miner.models.config import (
+    GitHubConfig,
+    ScoringWeights,
+    SystemConfig,
+    TopicConfig,
+)
+
 
 def test_github_token_not_in_repr():
     """Verify that GitHub token is not included in the repr of GitHubConfig."""
@@ -14,6 +19,7 @@ def test_github_token_not_in_repr():
     assert "token" not in repr_str
     assert "owner/repo" in repr_str
 
+
 def test_github_token_not_in_system_config_repr():
     """Verify that GitHub token is not included in the repr of SystemConfig."""
     secret = "ghp_VERY_SECRET_TOKEN"
@@ -21,12 +27,13 @@ def test_github_token_not_in_system_config_repr():
     system_config = SystemConfig(
         topics=[TopicConfig(name="test", query="test")],
         github=config,
-        scoring_weights=ScoringWeights()
+        scoring_weights=ScoringWeights(),
     )
 
     repr_str = repr(system_config)
     assert secret not in repr_str
     assert "token" not in repr_str
+
 
 def test_github_token_not_in_logs():
     """Verify that GitHub token is not leaked in logs when logging the config object."""

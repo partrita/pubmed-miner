@@ -3,7 +3,7 @@ Configuration data models.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import Any
 
 
 @dataclass
@@ -16,7 +16,7 @@ class TopicConfig:
     essential_count: int = 15
     enabled: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate topic configuration."""
         if not self.name:
             raise ValueError("Topic name cannot be empty")
@@ -36,12 +36,12 @@ class GitHubConfig:
 
     token: str = field(repr=False)
     repository: str
-    issue_labels: List[str] = field(
+    issue_labels: list[str] = field(
         default_factory=lambda: ["essential-papers", "automated"]
     )
     issue_prefix: str = "Essential Papers"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate GitHub configuration."""
         # Allow empty token for local testing (will use mock mode)
         if not self.token:
@@ -63,7 +63,7 @@ class ScoringWeights:
     recency_weight: float = 0.2
     relevance_weight: float = 0.1
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate scoring weights."""
         total = (
             self.citation_weight
@@ -88,12 +88,12 @@ class ScoringWeights:
 class SystemConfig:
     """Overall system configuration."""
 
-    topics: List[TopicConfig]
+    topics: list[TopicConfig]
     github: GitHubConfig
     scoring_weights: ScoringWeights
-    cache_settings: Dict[str, Any] = field(default_factory=dict)
+    cache_settings: dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate system configuration."""
         if not self.topics:
             raise ValueError("At least one topic must be configured")

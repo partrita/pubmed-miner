@@ -1,0 +1,65 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.10', '3.12' ]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v7
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Install dependencies
+      run: uv sync --locked --all-extras --dev
+
+    - name: Run tests
+      env:
+        # Avoid hitting real external APIs in CI; mocked tests cover the rest
+        SKIP_EXTERNAL_TESTS: 'true'
+        PUBMED_EMAIL: test@example.com
+        LOG_LEVEL: INFO
+      run: |
+        mkdir -p logs
+        uv run pytest -m "not slow"
+
+  type-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true  # Non-blocking until existing mypy errors are fixed
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Set up Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.12'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Install dependencies
+      run: uv sync --locked --all-extras --dev
+
+    - name: Run mypy
+      run: uv run mypy src/

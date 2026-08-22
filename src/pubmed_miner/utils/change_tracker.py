@@ -4,9 +4,9 @@ Change tracking utilities for monitoring paper list updates.
 
 import json
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional
 from datetime import datetime
+from pathlib import Path
+from typing import Any, cast
 
 from ..models import ScoredPaper
 
@@ -28,7 +28,7 @@ class ChangeTracker:
 
         logger.info(f"Initialized ChangeTracker with cache: {self.tracking_file}")
 
-    def save_paper_snapshot(self, topic: str, papers: List[ScoredPaper]) -> None:
+    def save_paper_snapshot(self, topic: str, papers: list[ScoredPaper]) -> None:
         """Save a snapshot of papers for a topic.
 
         Args:
@@ -40,7 +40,7 @@ class ChangeTracker:
             tracking_data = self._load_tracking_data()
 
             # Create snapshot
-            snapshot = {
+            snapshot: dict[str, Any] = {
                 "timestamp": datetime.now().isoformat(),
                 "paper_count": len(papers),
                 "papers": {},
@@ -70,7 +70,7 @@ class ChangeTracker:
         except Exception as e:
             logger.error(f"Error saving paper snapshot for {topic}: {e}")
 
-    def get_previous_snapshot(self, topic: str) -> Optional[Dict]:
+    def get_previous_snapshot(self, topic: str) -> dict[str, Any] | None:
         """Get the previous snapshot for a topic.
 
         Args:
@@ -87,8 +87,8 @@ class ChangeTracker:
             return None
 
     def detect_changes(
-        self, topic: str, current_papers: List[ScoredPaper]
-    ) -> Dict[str, any]:
+        self, topic: str, current_papers: list[ScoredPaper]
+    ) -> dict[str, Any]:
         """Detect changes between current and previous paper lists.
 
         Args:
@@ -118,7 +118,7 @@ class ChangeTracker:
         previous_dict = previous_snapshot.get("papers", {})
 
         # Detect different types of changes
-        changes = self._analyze_changes(previous_dict, current_dict)
+        changes: dict[str, Any] = self._analyze_changes(previous_dict, current_dict)
 
         # Determine if there are significant changes
         has_changes = (
@@ -148,8 +148,8 @@ class ChangeTracker:
         return result
 
     def _analyze_changes(
-        self, previous_dict: Dict[str, Dict], current_dict: Dict[str, ScoredPaper]
-    ) -> Dict[str, any]:
+        self, previous_dict: dict[str, dict], current_dict: dict[str, ScoredPaper]
+    ) -> dict[str, Any]:
         """Analyze changes between previous and current paper dictionaries.
 
         Args:
@@ -159,7 +159,7 @@ class ChangeTracker:
         Returns:
             Dictionary with detailed change analysis
         """
-        changes = {
+        changes: dict[str, Any] = {
             "new_papers": 0,
             "removed_papers": 0,
             "rank_changes": 0,
@@ -271,7 +271,7 @@ class ChangeTracker:
 
         return changes
 
-    def _create_change_summary(self, changes: Dict[str, any]) -> str:
+    def _create_change_summary(self, changes: dict[str, Any]) -> str:
         """Create a human-readable summary of changes.
 
         Args:
@@ -301,7 +301,7 @@ class ChangeTracker:
 
         return ", ".join(summary_parts)
 
-    def get_topic_history(self, topic: str, limit: int = 10) -> List[Dict]:
+    def get_topic_history(self, topic: str, limit: int = 10) -> list[dict[str, Any]]:
         """Get historical snapshots for a topic.
 
         Args:
@@ -318,7 +318,7 @@ class ChangeTracker:
                 return []
 
             with open(history_file, "r", encoding="utf-8") as f:
-                history = json.load(f)
+                history: list[dict[str, Any]] = json.load(f)
 
             # Return most recent entries first
             return history[-limit:] if len(history) > limit else history
@@ -327,7 +327,7 @@ class ChangeTracker:
             logger.error(f"Error loading topic history for {topic}: {e}")
             return []
 
-    def save_to_history(self, topic: str, papers: List[ScoredPaper]) -> None:
+    def save_to_history(self, topic: str, papers: list[ScoredPaper]) -> None:
         """Save current papers to historical record.
 
         Args:
@@ -338,13 +338,15 @@ class ChangeTracker:
             history_file = self.cache_dir / f"history_{topic}.json"
 
             # Load existing history
-            history = []
+            history: list[dict[str, Any]] = []
             if history_file.exists():
                 with open(history_file, "r", encoding="utf-8") as f:
-                    history = json.load(f)
+                    loaded = json.load(f)
+                if isinstance(loaded, list):
+                    history = loaded
 
             # Create new entry
-            entry = {
+            entry: dict[str, Any] = {
                 "timestamp": datetime.now().isoformat(),
                 "paper_count": len(papers),
                 "top_papers": [],
@@ -449,7 +451,7 @@ class ChangeTracker:
             logger.error(f"Error during cleanup: {e}")
             return 0
 
-    def _load_tracking_data(self) -> Dict:
+    def _load_tracking_data(self) -> dict[str, dict[str, Any]]:
         """Load tracking data from file.
 
         Returns:
@@ -460,12 +462,15 @@ class ChangeTracker:
 
         try:
             with open(self.tracking_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return cast(dict[str, dict[str, Any]], data)
+            return {}
+        except (OSError, json.JSONDecodeError) as e:
             logger.warning(f"Error loading tracking data: {e}")
             return {}
 
-    def _save_tracking_data(self, data: Dict) -> None:
+    def _save_tracking_data(self, data: dict[str, dict[str, Any]]) -> None:
         """Save tracking data to file.
 
         Args:
@@ -474,10 +479,10 @@ class ChangeTracker:
         try:
             with open(self.tracking_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-        except IOError as e:
+        except OSError as e:
             logger.error(f"Error saving tracking data: {e}")
 
-    def get_statistics(self) -> Dict[str, any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get tracking statistics.
 
         Returns:
@@ -486,7 +491,7 @@ class ChangeTracker:
         try:
             tracking_data = self._load_tracking_data()
 
-            stats = {
+            stats: dict[str, Any] = {
                 "tracked_topics": len(tracking_data),
                 "total_papers_tracked": 0,
                 "oldest_snapshot": None,

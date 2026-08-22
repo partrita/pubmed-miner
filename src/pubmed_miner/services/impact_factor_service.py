@@ -2,13 +2,14 @@
 Journal impact factor collection and estimation service.
 """
 
-import re
 import logging
-from typing import Dict, Optional
+import re
 from datetime import datetime
 from difflib import SequenceMatcher
+from typing import Any
 
 from ..models.cache import ImpactFactorCache
+from ..utils.cache import CacheManager
 from ..utils.error_handler import retry_api_calls
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ImpactFactorService:
     """Service for collecting and estimating journal impact factors."""
 
-    def __init__(self, cache_manager=None):
+    def __init__(self, cache_manager: CacheManager | None = None) -> None:
         """Initialize impact factor service.
 
         Args:
@@ -51,7 +52,7 @@ class ImpactFactorService:
 
         logger.info("Initialized ImpactFactorService")
 
-    def get_impact_factor(self, journal_name: str) -> Optional[float]:
+    def get_impact_factor(self, journal_name: str) -> float | None:
         """Get impact factor for a journal.
 
         Args:
@@ -80,10 +81,10 @@ class ImpactFactorService:
 
         # Try external APIs
         try:
-            impact_factor = self._get_scimago_impact_factor(normalized_name)
-            if impact_factor is not None:
-                self._cache_impact_factor(normalized_name, impact_factor, "scimago")
-                return impact_factor
+            scimago_if = self._get_scimago_impact_factor(normalized_name)
+            if scimago_if is not None:
+                self._cache_impact_factor(normalized_name, scimago_if, "scimago")
+                return scimago_if
         except Exception as e:
             logger.warning(f"SCImago lookup failed for {journal_name}: {e}")
 
@@ -96,7 +97,7 @@ class ImpactFactorService:
         logger.warning(f"No impact factor found for journal: {journal_name}")
         return None
 
-    def estimate_impact_factor(self, journal_name: str) -> float:
+    def estimate_impact_factor(self, journal_name: str) -> float | None:
         """Estimate impact factor based on journal name patterns and similar journals.
 
         Args:
@@ -124,7 +125,7 @@ class ImpactFactorService:
         logger.info(f"Default estimate for {journal_name}: {default_if}")
         return default_if
 
-    def match_journal_name(self, partial_name: str) -> Optional[str]:
+    def match_journal_name(self, partial_name: str) -> str | None:
         """Find the best matching journal name from known journals.
 
         Args:
@@ -141,7 +142,7 @@ class ImpactFactorService:
         best_score = 0.0
 
         # Check against known journals
-        for known_journal in self.known_impact_factors.keys():
+        for known_journal in self.known_impact_factors:
             score = SequenceMatcher(None, normalized_partial, known_journal).ratio()
             if score > best_score and score > 0.6:  # Minimum similarity threshold
                 best_score = score
@@ -224,7 +225,7 @@ class ImpactFactorService:
 
         return normalized
 
-    def _get_builtin_impact_factor(self, normalized_name: str) -> Optional[float]:
+    def _get_builtin_impact_factor(self, normalized_name: str) -> float | None:
         """Get impact factor from built-in data.
 
         Args:
@@ -249,7 +250,7 @@ class ImpactFactorService:
         return None
 
     @retry_api_calls(max_attempts=2, delay=1.0)
-    def _get_scimago_impact_factor(self, journal_name: str) -> Optional[float]:
+    def _get_scimago_impact_factor(self, journal_name: str) -> float | None:
         """Get impact factor from SCImago API (placeholder implementation).
 
         Args:
@@ -265,7 +266,7 @@ class ImpactFactorService:
         logger.debug(f"SCImago lookup not implemented for {journal_name}")
         return None
 
-    def _estimate_by_patterns(self, normalized_name: str) -> Optional[float]:
+    def _estimate_by_patterns(self, normalized_name: str) -> float | None:
         """Estimate impact factor based on journal name patterns.
 
         Args:
@@ -315,7 +316,7 @@ class ImpactFactorService:
 
         return None
 
-    def _estimate_by_similarity(self, normalized_name: str) -> Optional[float]:
+    def _estimate_by_similarity(self, normalized_name: str) -> float | None:
         """Estimate impact factor based on similarity to known journals.
 
         Args:
@@ -377,7 +378,7 @@ class ImpactFactorService:
         # Default for unknown types
         return 2.5
 
-    def _get_cached_impact_factor(self, journal_name: str) -> Optional[float]:
+    def _get_cached_impact_factor(self, journal_name: str) -> float | None:
         """Get impact factor from cache.
 
         Args:
@@ -395,7 +396,7 @@ class ImpactFactorService:
                 logger.debug(
                     f"Using cached impact factor for {journal_name}: {cache_entry.impact_factor}"
                 )
-                return cache_entry.impact_factor
+                return float(cache_entry.impact_factor)
         except Exception as e:
             logger.warning(f"Error reading impact factor cache for {journal_name}: {e}")
 
@@ -429,7 +430,7 @@ class ImpactFactorService:
         except Exception as e:
             logger.warning(f"Error caching impact factor for {journal_name}: {e}")
 
-    def get_journal_statistics(self) -> Dict[str, any]:
+    def get_journal_statistics(self) -> dict[str, Any]:
         """Get statistics about cached journal data.
 
         Returns:

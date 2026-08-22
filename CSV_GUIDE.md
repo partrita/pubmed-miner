@@ -34,7 +34,7 @@ papers = [
         publication_date=datetime(2024, 1, 15),
         doi="10.1234/sample.2024.001",
         abstract="This paper discusses ML applications...",
-        topic="ai-healthcare"  # Topic 정보 추가
+        topic="ai-healthcare",  # Topic 정보 추가
     )
 ]
 
@@ -59,7 +59,7 @@ scored_papers = [
         score=95.0,
         rank=1,
         doi="10.1234/score.2024.001",
-        topic="cancer-immunotherapy"  # Topic 정보 추가
+        topic="cancer-immunotherapy",  # Topic 정보 추가
     )
 ]
 
@@ -79,7 +79,7 @@ new_papers = [
         journal="New Journal",
         publication_date=datetime(2024, 1, 19),
         doi="10.1234/new.2024.001",
-        topic="bioinformatics"  # Topic 정보 추가
+        topic="bioinformatics",  # Topic 정보 추가
     )
 ]
 
@@ -219,7 +219,7 @@ service = PaperCollectionService(email="your.email@example.com")
 topics = {
     "ai-drug-discovery": "machine learning AND drug discovery",
     "cancer-immunotherapy": "cancer AND immunotherapy",
-    "protein-design": "de novo design AND artificial intelligence AND protein design"
+    "protein-design": "de novo design AND artificial intelligence AND protein design",
 }
 
 all_papers = []
@@ -266,7 +266,7 @@ from collections import Counter
 papers = CSVManager.load_papers("data/collections.csv")
 
 # 토픽별 논문 수
-topics = [p['topic'] for p in papers if p['topic']]
+topics = [p["topic"] for p in papers if p["topic"]]
 topic_counts = Counter(topics)
 
 print("📊 토픽별 논문 수:")
@@ -275,8 +275,8 @@ for topic, count in topic_counts.most_common():
 
 # 토픽별 저널 분석
 for topic in set(topics):
-    topic_papers = [p for p in papers if p['topic'] == topic]
-    journals = [p['journal'] for p in topic_papers]
+    topic_papers = [p for p in papers if p["topic"] == topic]
+    journals = [p["journal"] for p in topic_papers]
     journal_counts = Counter(journals)
     print(f"\n📰 {topic} - 상위 저널:")
     for journal, count in journal_counts.most_common(3):
@@ -292,7 +292,7 @@ from collections import Counter
 papers = CSVManager.load_papers("data/collections.csv")
 
 # 저널별 논문 수
-journals = [p['journal'] for p in papers]
+journals = [p["journal"] for p in papers]
 journal_counts = Counter(journals)
 
 print("📊 저널별 논문 수:")
@@ -302,7 +302,7 @@ for journal, count in journal_counts.most_common(10):
 # 저자 분석
 all_authors = []
 for paper in papers:
-    authors = [a.strip() for a in paper['authors'].split(';')]
+    authors = [a.strip() for a in paper["authors"].split(";")]
     all_authors.extend(authors)
 
 author_counts = Counter(all_authors)

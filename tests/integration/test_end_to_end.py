@@ -2,21 +2,27 @@
 End-to-end integration tests for the complete system.
 """
 
-import pytest
-import tempfile
-import yaml
 import os
-from pathlib import Path
-from unittest.mock import Mock, patch
-from datetime import datetime
 
 # Import the main automation script
 import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from automated_collection import AutomatedCollectionOrchestrator
+
 from src.pubmed_miner.models import Paper
+
+
+class SimulatedAPIFailure(Exception):
+    """Simulated API failure used by end-to-end tests."""
 
 
 class TestEndToEndWorkflow:
@@ -26,6 +32,9 @@ class TestEndToEndWorkflow:
         """Set up test fixtures."""
         # Create temporary directory for test configs
         self.temp_dir = tempfile.mkdtemp()
+
+        # Save the original working directory so it can be restored
+        self.original_cwd = os.getcwd()
 
         # Create test configuration files
         self.create_test_configs()
@@ -37,6 +46,9 @@ class TestEndToEndWorkflow:
 
     def teardown_method(self):
         """Clean up test fixtures."""
+        # Restore original working directory before removing temp dir
+        os.chdir(self.original_cwd)
+
         import shutil
 
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -139,8 +151,8 @@ class TestEndToEndWorkflow:
                     "automated_collection.ImpactFactorService"
                 ) as mock_if_service:
                     with patch(
-                        "automated_collection.GitHubIssuesManager"
-                    ) as mock_github_manager:
+                        "automated_collection.MdBookManager"
+                    ) as mock_mdbook_manager:
                         # Set up mock paper collection service
                         mock_paper_instance = Mock()
                         mock_paper_service.return_value = mock_paper_instance
@@ -167,7 +179,7 @@ class TestEndToEndWorkflow:
                         mock_paper_instance.search_papers.side_effect = (
                             mock_search_papers
                         )
-                        mock_paper_instance.get_papers_details.side_effect = (
+                        mock_paper_instance.get_paper_details.side_effect = (
                             mock_get_paper_details
                         )
 
@@ -185,19 +197,11 @@ class TestEndToEndWorkflow:
                             lambda journal: hash(journal) % 50 + 1
                         )
 
-                        # Set up mock GitHub manager
-                        mock_github_instance = Mock()
-                        mock_github_manager.return_value = mock_github_instance
-
-                        def mock_create_or_update_issue(topic, papers):
-                            return {
-                                "number": hash(topic) % 100 + 1,
-                                "created": True,
-                                "html_url": f"https://github.com/testuser/testrepo/issues/{hash(topic) % 100 + 1}",
-                            }
-
-                        mock_github_instance.create_or_update_issue.side_effect = (
-                            mock_create_or_update_issue
+                        # Set up mock MdBook manager
+                        mock_mdbook_instance = Mock()
+                        mock_mdbook_manager.return_value = mock_mdbook_instance
+                        mock_mdbook_instance.update_monthly_page.return_value = (
+                            "book_src/monthly/test.md"
                         )
 
                         # Initialize and run orchestrator
@@ -208,7 +212,7 @@ class TestEndToEndWorkflow:
                         assert results["success"] is True
                         assert results["topics_processed"] == 2  # Only enabled topics
                         assert results["papers_collected"] > 0
-                        assert results["issues_created"] == 2
+                        assert results["pages_created"] == 2
                         assert len(results["errors"]) == 0
 
                         # Verify that disabled topics were not processed
@@ -226,8 +230,8 @@ class TestEndToEndWorkflow:
                     "automated_collection.ImpactFactorService"
                 ) as mock_if_service:
                     with patch(
-                        "automated_collection.GitHubIssuesManager"
-                    ) as mock_github_manager:
+                        "automated_collection.MdBookManager"
+                    ) as mock_mdbook_manager:
                         # Set up services with some failures
                         mock_paper_instance = Mock()
                         mock_paper_service.return_value = mock_paper_instance
@@ -236,13 +240,13 @@ class TestEndToEndWorkflow:
                             if "machine learning" in query:
                                 return ["ml_1", "ml_2"]
                             elif "COVID-19" in query:
-                                raise Exception("PubMed API error")
+                                raise SimulatedAPIFailure("PubMed API error")
                             return []
 
                         mock_paper_instance.search_papers.side_effect = (
                             mock_search_with_failure
                         )
-                        mock_paper_instance.get_papers_details.return_value = (
+                        mock_paper_instance.get_paper_details.return_value = (
                             self.create_sample_papers("ml", 2)
                         )
 
@@ -252,7 +256,7 @@ class TestEndToEndWorkflow:
 
                         def mock_citation_with_failure(pmid):
                             if "1" in pmid:
-                                raise Exception("Citation API error")
+                                raise SimulatedAPIFailure("Citation API error")
                             return 100
 
                         mock_citation_instance.get_citation_count.side_effect = (
@@ -264,14 +268,12 @@ class TestEndToEndWorkflow:
                         mock_if_service.return_value = mock_if_instance
                         mock_if_instance.get_impact_factor.return_value = 10.0
 
-                        # GitHub manager working
-                        mock_github_instance = Mock()
-                        mock_github_manager.return_value = mock_github_instance
-                        mock_github_instance.create_or_update_issue.return_value = {
-                            "number": 42,
-                            "created": True,
-                            "html_url": "https://github.com/testuser/testrepo/issues/42",
-                        }
+                        # MdBook manager working
+                        mock_mdbook_instance = Mock()
+                        mock_mdbook_manager.return_value = mock_mdbook_instance
+                        mock_mdbook_instance.update_monthly_page.return_value = (
+                            "book_src/monthly/test.md"
+                        )
 
                         # Run orchestrator
                         orchestrator = AutomatedCollectionOrchestrator()
@@ -289,33 +291,22 @@ class TestEndToEndWorkflow:
     def test_workflow_with_no_papers_found(self):
         """Test workflow when no papers are found for topics."""
         with patch("automated_collection.PaperCollectionService") as mock_paper_service:
-            with patch(
-                "automated_collection.GitHubIssuesManager"
-            ) as mock_github_manager:
+            with patch("automated_collection.MdBookManager"):
                 # Set up paper service to return no results
                 mock_paper_instance = Mock()
                 mock_paper_service.return_value = mock_paper_instance
                 mock_paper_instance.search_papers.return_value = []
-                mock_paper_instance.get_papers_details.return_value = []
-
-                # Set up GitHub manager
-                mock_github_instance = Mock()
-                mock_github_manager.return_value = mock_github_instance
-                mock_github_instance.create_or_update_issue.return_value = {
-                    "number": 43,
-                    "created": True,
-                    "html_url": "https://github.com/testuser/testrepo/issues/43",
-                }
+                mock_paper_instance.get_paper_details.return_value = []
 
                 # Run orchestrator
                 orchestrator = AutomatedCollectionOrchestrator()
                 results = orchestrator.run_complete_workflow()
 
-                # Should still create issues with "no papers found" message
+                # Should still process all enabled topics even with no results
                 assert results["success"] is True
                 assert results["topics_processed"] == 2
                 assert results["papers_collected"] == 0
-                assert results["issues_created"] == 2
+                assert results["pages_created"] == 0
 
     def test_workflow_configuration_errors(self):
         """Test workflow behavior with configuration errors."""
@@ -348,9 +339,20 @@ class TestEndToEndWorkflow:
         # Remove required environment variable
         del os.environ["GITHUB_TOKEN"]
 
-        # Should fail during initialization
-        with pytest.raises(Exception):
-            AutomatedCollectionOrchestrator()
+        # The orchestrator no longer requires a GitHub token at init time
+        # (GitHub integration runs in mock mode without one), so it should
+        # initialize successfully. External services are mocked to avoid
+        # real network access.
+        with patch("automated_collection.PaperCollectionService") as mock_paper_service:
+            mock_paper_instance = Mock()
+            mock_paper_service.return_value = mock_paper_instance
+            mock_paper_instance.search_papers.return_value = []
+
+            orchestrator = AutomatedCollectionOrchestrator()
+            results = orchestrator.run_complete_workflow()
+
+        assert isinstance(results, dict)
+        assert "success" in results
 
     def test_workflow_statistics_collection(self):
         """Test that workflow collects proper statistics."""
@@ -360,13 +362,13 @@ class TestEndToEndWorkflow:
                     "automated_collection.ImpactFactorService"
                 ) as mock_if_service:
                     with patch(
-                        "automated_collection.GitHubIssuesManager"
-                    ) as mock_github_manager:
+                        "automated_collection.MdBookManager"
+                    ) as mock_mdbook_manager:
                         # Set up mocks to return predictable data
                         mock_paper_instance = Mock()
                         mock_paper_service.return_value = mock_paper_instance
                         mock_paper_instance.search_papers.return_value = ["1", "2", "3"]
-                        mock_paper_instance.get_papers_details.return_value = (
+                        mock_paper_instance.get_paper_details.return_value = (
                             self.create_sample_papers("test", 3)
                         )
 
@@ -378,13 +380,11 @@ class TestEndToEndWorkflow:
                         mock_if_service.return_value = mock_if_instance
                         mock_if_instance.get_impact_factor.return_value = 5.0
 
-                        mock_github_instance = Mock()
-                        mock_github_manager.return_value = mock_github_instance
-                        mock_github_instance.create_or_update_issue.return_value = {
-                            "number": 1,
-                            "created": True,
-                            "html_url": "https://github.com/test/repo/issues/1",
-                        }
+                        mock_mdbook_instance = Mock()
+                        mock_mdbook_manager.return_value = mock_mdbook_instance
+                        mock_mdbook_instance.update_monthly_page.return_value = (
+                            "book_src/monthly/test.md"
+                        )
 
                         # Run orchestrator
                         orchestrator = AutomatedCollectionOrchestrator()
@@ -399,7 +399,7 @@ class TestEndToEndWorkflow:
                         assert (
                             results["papers_collected"] == 6
                         )  # 3 papers per topic, 2 topics
-                        assert results["issues_created"] == 2
+                        assert results["pages_created"] == 2
 
     def test_workflow_logging_integration(self):
         """Test that workflow properly integrates with logging system."""
@@ -416,37 +416,29 @@ class TestEndToEndWorkflow:
         logger.setLevel(logging.INFO)
 
         try:
-            with patch(
-                "automated_collection.PaperCollectionService"
-            ) as mock_paper_service:
-                with patch(
-                    "automated_collection.GitHubIssuesManager"
-                ) as mock_github_manager:
-                    # Set up minimal mocks
-                    mock_paper_instance = Mock()
-                    mock_paper_service.return_value = mock_paper_instance
-                    mock_paper_instance.search_papers.return_value = []
-                    mock_paper_instance.get_papers_details.return_value = []
+            with (
+                patch(
+                    "automated_collection.PaperCollectionService"
+                ) as mock_paper_service,
+                patch("automated_collection.MdBookManager"),
+            ):
+                # Set up minimal mocks
+                mock_paper_instance = Mock()
+                mock_paper_service.return_value = mock_paper_instance
+                mock_paper_instance.search_papers.return_value = []
+                mock_paper_instance.get_paper_details.return_value = []
 
-                    mock_github_instance = Mock()
-                    mock_github_manager.return_value = mock_github_instance
-                    mock_github_instance.create_or_update_issue.return_value = {
-                        "number": 1,
-                        "created": True,
-                        "html_url": "https://github.com/test/repo/issues/1",
-                    }
+                # Run orchestrator
+                orchestrator = AutomatedCollectionOrchestrator()
+                orchestrator.run_complete_workflow()
 
-                    # Run orchestrator
-                    orchestrator = AutomatedCollectionOrchestrator()
-                    orchestrator.run_complete_workflow()
-
-                    # Check that logs were generated
-                    log_output = log_capture.getvalue()
-                    assert (
-                        "Starting automated essential papers collection workflow"
-                        in log_output
-                    )
-                    assert "Workflow completed" in log_output
+                # Check that logs were generated
+                log_output = log_capture.getvalue()
+                assert (
+                    "Starting automated essential papers collection workflow"
+                    in log_output
+                )
+                assert "Workflow completed" in log_output
 
         finally:
             logger.removeHandler(handler)
@@ -454,52 +446,63 @@ class TestEndToEndWorkflow:
     def test_workflow_error_recovery(self):
         """Test workflow error recovery and continuation."""
         with patch("automated_collection.PaperCollectionService") as mock_paper_service:
-            with patch(
-                "automated_collection.GitHubIssuesManager"
-            ) as mock_github_manager:
-                # Set up paper service with mixed success/failure
-                mock_paper_instance = Mock()
-                mock_paper_service.return_value = mock_paper_instance
+            with patch("automated_collection.CitationService") as mock_citation_service:
+                with patch(
+                    "automated_collection.ImpactFactorService"
+                ) as mock_if_service:
+                    with patch(
+                        "automated_collection.MdBookManager"
+                    ) as mock_mdbook_manager:
+                        # Set up paper service with mixed success/failure
+                        mock_paper_instance = Mock()
+                        mock_paper_service.return_value = mock_paper_instance
 
-                call_count = 0
+                        call_count = 0
 
-                def mock_search_mixed_results(query, max_papers):
-                    nonlocal call_count
-                    call_count += 1
-                    if call_count == 1:
-                        # First topic succeeds
-                        return ["1", "2"]
-                    else:
-                        # Second topic fails
-                        raise Exception("API failure")
+                        def mock_search_mixed_results(query, max_papers):
+                            nonlocal call_count
+                            call_count += 1
+                            if call_count == 1:
+                                # First topic succeeds
+                                return ["1", "2"]
+                            else:
+                                # Second topic fails
+                                raise SimulatedAPIFailure("API failure")
 
-                mock_paper_instance.search_papers.side_effect = (
-                    mock_search_mixed_results
-                )
-                mock_paper_instance.get_papers_details.return_value = (
-                    self.create_sample_papers("test", 2)
-                )
+                        mock_paper_instance.search_papers.side_effect = (
+                            mock_search_mixed_results
+                        )
+                        mock_paper_instance.get_paper_details.return_value = (
+                            self.create_sample_papers("test", 2)
+                        )
 
-                # Set up GitHub manager
-                mock_github_instance = Mock()
-                mock_github_manager.return_value = mock_github_instance
-                mock_github_instance.create_or_update_issue.return_value = {
-                    "number": 1,
-                    "created": True,
-                    "html_url": "https://github.com/test/repo/issues/1",
-                }
+                        # Citation and impact factor services working
+                        mock_citation_instance = Mock()
+                        mock_citation_service.return_value = mock_citation_instance
+                        mock_citation_instance.get_citation_count.return_value = 50
 
-                # Run orchestrator
-                orchestrator = AutomatedCollectionOrchestrator()
-                results = orchestrator.run_complete_workflow()
+                        mock_if_instance = Mock()
+                        mock_if_service.return_value = mock_if_instance
+                        mock_if_instance.get_impact_factor.return_value = 5.0
 
-                # Should continue processing despite one failure
-                assert results["topics_processed"] == 1  # One succeeded
-                assert len(results["errors"]) == 1  # One failed
-                assert results["success"] is True  # Overall success
-                assert (
-                    results["issues_created"] == 1
-                )  # Issue created for successful topic
+                        # Set up MdBook manager
+                        mock_mdbook_instance = Mock()
+                        mock_mdbook_manager.return_value = mock_mdbook_instance
+                        mock_mdbook_instance.update_monthly_page.return_value = (
+                            "book_src/monthly/test.md"
+                        )
+
+                        # Run orchestrator
+                        orchestrator = AutomatedCollectionOrchestrator()
+                        results = orchestrator.run_complete_workflow()
+
+                        # Should continue processing despite one failure
+                        assert results["topics_processed"] == 1  # One succeeded
+                        assert len(results["errors"]) == 1  # One failed
+                        assert results["success"] is True  # Overall success
+                        assert (
+                            results["pages_created"] == 1
+                        )  # Page created for successful topic
 
     def test_workflow_performance_under_load(self):
         """Test workflow performance with larger datasets."""
@@ -509,8 +512,8 @@ class TestEndToEndWorkflow:
                     "automated_collection.ImpactFactorService"
                 ) as mock_if_service:
                     with patch(
-                        "automated_collection.GitHubIssuesManager"
-                    ) as mock_github_manager:
+                        "automated_collection.MdBookManager"
+                    ) as mock_mdbook_manager:
                         # Set up services to return larger datasets
                         mock_paper_instance = Mock()
                         mock_paper_service.return_value = mock_paper_instance
@@ -519,7 +522,7 @@ class TestEndToEndWorkflow:
                         mock_paper_instance.search_papers.return_value = [
                             str(i) for i in range(100)
                         ]
-                        mock_paper_instance.get_papers_details.return_value = (
+                        mock_paper_instance.get_paper_details.return_value = (
                             self.create_sample_papers("perf", 100)
                         )
 
@@ -533,14 +536,12 @@ class TestEndToEndWorkflow:
                         mock_if_service.return_value = mock_if_instance
                         mock_if_instance.get_impact_factor.return_value = 5.0
 
-                        # Fast GitHub manager
-                        mock_github_instance = Mock()
-                        mock_github_manager.return_value = mock_github_instance
-                        mock_github_instance.create_or_update_issue.return_value = {
-                            "number": 1,
-                            "created": True,
-                            "html_url": "https://github.com/test/repo/issues/1",
-                        }
+                        # Fast MdBook manager
+                        mock_mdbook_instance = Mock()
+                        mock_mdbook_manager.return_value = mock_mdbook_instance
+                        mock_mdbook_instance.update_monthly_page.return_value = (
+                            "book_src/monthly/test.md"
+                        )
 
                         # Measure performance
                         import time
@@ -559,3 +560,4 @@ class TestEndToEndWorkflow:
                         assert (
                             results["papers_collected"] == 200
                         )  # 100 papers per topic, 2 topics
+                        assert results["pages_created"] == 2

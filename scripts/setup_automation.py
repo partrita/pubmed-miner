@@ -17,8 +17,8 @@ from pathlib import Path
 # Path(__file__).parent.parent is root/
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from pubmed_miner.utils.config_manager import ConfigurationManager
 from pubmed_miner.services.github_manager import GitHubIssuesManager
+from pubmed_miner.utils.config_manager import ConfigurationManager
 
 
 def check_environment():
@@ -188,7 +188,9 @@ def main():
 
     if env_ok and config_ok and github_ok:
         print("\n🎉 Setup complete! Your automation is ready to run.")
-        print("   You can test it manually with: python scripts/automated_collection.py")
+        print(
+            "   You can test it manually with: python scripts/automated_collection.py"
+        )
     else:
         print("\n⚠️  Setup incomplete. Please address the issues above.")
         show_setup_instructions()

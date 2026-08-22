@@ -2,16 +2,17 @@
 Unit tests for data models.
 """
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from src.pubmed_miner.models import (
+    GitHubConfig,
     Paper,
     ScoredPaper,
-    TopicConfig,
-    GitHubConfig,
     ScoringWeights,
     SystemConfig,
+    TopicConfig,
 )
 
 

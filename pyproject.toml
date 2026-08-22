@@ -31,25 +31,12 @@ dependencies = [
 requires-python = ">=3.10"
 
 [project.urls]
-Homepage = "https://github.com/example/pubmed-miner"
-Repository = "https://github.com/example/pubmed-miner"
-Documentation = "https://github.com/example/pubmed-miner#readme"
-"Bug Tracker" = "https://github.com/example/pubmed-miner/issues"
+Homepage = "https://github.com/partrita/pubmed-miner"
+Repository = "https://github.com/partrita/pubmed-miner"
+Documentation = "https://github.com/partrita/pubmed-miner#readme"
+"Bug Tracker" = "https://github.com/partrita/pubmed-miner/issues"
 
 [project.optional-dependencies]
-test = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-mock>=3.10.0",
-    "coverage>=7.0.0",
-]
-dev = [
-    "black>=24.3.0",
-    "flake8>=5.0.0",
-    "mypy>=1.0.0",
-    "pre-commit>=2.20.0",
-    "isort>=5.10.0",
-]
 docs = [
     "sphinx>=5.0.0",
     "sphinx-rtd-theme>=1.0.0",
@@ -73,6 +60,7 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
+    "-ra",
     "--strict-markers",
     "--strict-config",
     "--cov=src/pubmed_miner",
@@ -84,6 +72,12 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
+    "e2e: marks tests as end-to-end tests",
+    "external: marks tests as requiring external API access",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
 ]
 
 # Type checking with mypy
@@ -105,10 +99,33 @@ strict_equality = true
 [[tool.mypy.overrides]]
 module = [
     "Bio.*",
-    "pandas.*",
-    "tqdm.*",
 ]
 ignore_missing_imports = true
+
+# Linting with ruff (>= 0.16 enables ~413 stable rules by default)
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+extend-exclude = ["book_src", "dist", "htmlcov"]
+
+[tool.ruff.lint]
+# Keep ruff's expanded default rule set, excluding rules that conflict with
+# deliberate design decisions in this project:
+ignore = [
+    # Naive datetimes are intentional: PubMed publication dates are timezone-less
+    # calendar dates, and the SQLite cache stores naive timestamps via
+    # sqlite3's TIMESTAMP adapters (tz-aware values would break round-tripping).
+    "DTZ",
+    # Broad `except Exception` at service boundaries is intentional: the scraping
+    # pipeline must isolate per-item/per-request failures and keep running.
+    "BLE001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test suites intentionally assert on generic exception behavior, and
+# mock-heavy tests often stack several `with patch(...)` blocks whose
+# re-indentation would create excessive churn.
+"tests/*" = ["B017", "SIM117"]
 
 # Coverage configuration
 [tool.coverage.run]
@@ -138,4 +155,16 @@ exclude_lines = [
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "coverage>=7.0.0",
+    "black>=24.3.0",
+    "isort>=5.10.0",
+    "mypy>=1.0.0",
+    "pre-commit>=2.20.0",
+    "types-PyYAML>=6.0",
 ]
+
+# Import sorting compatible with Black
+[tool.isort]
+profile = "black"

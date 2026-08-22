@@ -5,10 +5,9 @@ Citation information collection service.
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple, Dict
+from typing import Any, cast
 
 import requests
-from urllib3.util.retry import Retry
 
 from ..models.cache import CitationCache
 
@@ -16,9 +15,10 @@ logger = logging.getLogger(__name__)
 
 try:
     from Bio import Entrez as BioEntrez
+
     HAS_BIOENTRZ = True
 except ImportError:
-    BioEntrez = None
+    BioEntrez = None  # type: ignore[assignment]
     HAS_BIOENTRZ = False
 
 
@@ -28,18 +28,18 @@ class CacheManager:
     def __init__(self, cache_expiry_days: int = 7, max_cache_size: int = 5000):
         self.cache_expiry_days = cache_expiry_days
         self.max_cache_size = max_cache_size
-        self.cache: Dict[str, CitationCache] = {}
+        self.cache: dict[str, CitationCache] = {}
 
     def get_citation(
-        self, pmid: str, doi: Optional[str] = None
-    ) -> Optional[CitationCache]:
+        self, pmid: str, doi: str | None = None
+    ) -> CitationCache | None:
         key = pmid
         if doi:
             key = f"{pmid}:{doi}"
         return self.cache.get(key)
 
     def save_citation(
-        self, pmid: str, count: int, source: str, doi: Optional[str] = None
+        self, pmid: str, count: int, source: str, doi: str | None = None
     ) -> None:
         key = pmid
         if doi:
@@ -55,18 +55,14 @@ class CacheManager:
         return citation.is_expired(self.cache_expiry_days)
 
     def clear_expired(self) -> int:
-        expired_keys = [
-            k for k, v in self.cache.items() if self.is_expired(v)
-        ]
+        expired_keys = [k for k, v in self.cache.items() if self.is_expired(v)]
         for k in expired_keys:
             del self.cache[k]
         return len(expired_keys)
 
     clear_expired_citations = clear_expired
 
-    clear_expired_citations = clear_expired
-
-    def get_all_papers(self) -> List[CitationCache]:
+    def get_all_papers(self) -> list[CitationCache]:
         return list(self.cache.values())
 
     def cleanup_unused(self, max_age_days: int = 30) -> int:
@@ -86,8 +82,8 @@ class CitationService:
         max_cache_size: int = 5000,
         retry_attempts: int = 3,
         retry_delay: float = 1.0,
-        crossref_email: Optional[str] = None,
-        cache_manager: Optional[CacheManager] = None,
+        crossref_email: str | None = None,
+        cache_manager: CacheManager | None = None,
     ):
         self.logger = logging.getLogger(__name__)
         self.cache_manager = cache_manager or CacheManager(
@@ -113,9 +109,7 @@ class CitationService:
 
         self.logger.info("Initialized CitationService")
 
-    def get_citation_count(
-        self, pmid: str, doi: Optional[str] = None
-    ) -> int:
+    def get_citation_count(self, pmid: str, doi: str | None = None) -> int:
         """Get citation count for a paper using PMID or DOI."""
         if not pmid:
             raise ValueError("PMID cannot be empty")
@@ -136,9 +130,7 @@ class CitationService:
             try:
                 count, source = self._fetch_from_apis(pmid, doi)
                 if count is not None:
-                    self.cache_manager.save_citation(
-                        pmid, count, source, doi
-                    )
+                    self.cache_manager.save_citation(pmid, count, source, doi)
                     return count
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 429:
@@ -159,8 +151,8 @@ class CitationService:
         return 0
 
     def _fetch_from_apis(
-        self, pmid: str, doi: Optional[str] = None
-    ) -> Tuple[Optional[int], str]:
+        self, pmid: str, doi: str | None = None
+    ) -> tuple[int | None, str]:
         if doi:
             count = self._fetch_from_crossref(doi)
             if count is not None:
@@ -170,9 +162,9 @@ class CitationService:
         if count is not None:
             return count, "semantic_scholar"
 
-        return None, None
+        return None, ""
 
-    def _fetch_from_crossref(self, doi: str) -> Optional[int]:
+    def _fetch_from_crossref(self, doi: str) -> int | None:
         try:
             response = requests.get(
                 f"{self.crossref_base_url}/{doi}",
@@ -187,38 +179,43 @@ class CitationService:
             else:
                 count = 0
             self._crossref_calls += 1
-            return count
+            return int(count)
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 429:
+                raise
+            return None
         except requests.exceptions.RequestException:
             return None
         except Exception:
             return None
 
     def _fetch_from_semantic_scholar(
-        self, pmid: str, doi: Optional[str] = None
-    ) -> int:
+        self, pmid: str, doi: str | None = None
+    ) -> int | None:
         try:
             identifier = doi if doi else f"pubmed:{pmid}"
-            url = (
-                f"{self.semantic_scholar_base_url}/"
-                f"{identifier}?fields=citationCount"
-            )
+            url = f"{self.semantic_scholar_base_url}/{identifier}?fields=citationCount"
             response = requests.get(url, timeout=30)
             response.raise_for_status()
             data = response.json()
             count = data.get("citationCount", 0)
             self._semantic_scholar_calls += 1
-            return count
+            return int(count)
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 429:
+                raise
+            return None
         except requests.exceptions.RequestException:
-            return 0
+            return None
         except Exception:
-            return 0
+            return None
 
     def _is_cache_expired(self, citation: CitationCache) -> bool:
         return self.cache_manager.is_expired(citation)
 
     def batch_get_citation_counts(
-        self, pmids: List[str], skip_errors: bool = False
-    ) -> Dict[str, int]:
+        self, pmids: list[str], skip_errors: bool = False
+    ) -> dict[str, int]:
         results = {}
         for pmid in pmids:
             try:
@@ -231,23 +228,19 @@ class CitationService:
                     raise
         return results
 
-    def update_cache_settings(self, settings: Dict) -> None:
+    def update_cache_settings(self, settings: dict) -> None:
         if "cache_expiry_days" in settings:
-            self.cache_manager.cache_expiry_days = settings[
-                "cache_expiry_days"
-            ]
+            self.cache_manager.cache_expiry_days = settings["cache_expiry_days"]
         if "max_cache_size" in settings:
-            self.cache_manager.max_cache_size = settings[
-                "max_cache_size"
-            ]
+            self.cache_manager.max_cache_size = settings["max_cache_size"]
 
-    def get_cached_papers(self) -> List[CitationCache]:
+    def get_cached_papers(self) -> list[CitationCache]:
         return self.cache_manager.get_all_papers()
 
     def clear_expired_cache(self) -> int:
         return self.cache_manager.clear_expired()
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         return {
             "total_requests": self._total_requests,
             "cache_hits": self._cache_hits,
@@ -264,7 +257,7 @@ class CitationService:
             return False
         return doi.startswith("10.") and "/" in doi
 
-    def _get_doi_from_pmid(self, pmid: str) -> Optional[str]:
+    def _get_doi_from_pmid(self, pmid: str) -> str | None:
         try:
             if not HAS_BIOENTRZ:
                 self.logger.warning(
@@ -272,11 +265,10 @@ class CitationService:
                 )
                 return None
 
-            Entrez = BioEntrez
+            Entrez = cast(Any, BioEntrez)
+            assert Entrez is not None
             Entrez.email = "pubmed.miner@example.com"
-            handle = Entrez.esearch(
-                db="pubmed", term=pmid, retmode="xml"
-            )
+            handle = Entrez.esearch(db="pubmed", term=pmid, retmode="xml")
             record = Entrez.read(handle)
             handle.close()
 
@@ -297,25 +289,18 @@ class CitationService:
             if isinstance(article_ids, dict):
                 article_ids = [article_ids]
             for article in article_ids:
-                id_list = article.get("PubmedData", {}).get(
-                    "ArticleIdList", []
-                )
+                id_list = article.get("PubmedData", {}).get("ArticleIdList", [])
                 if isinstance(id_list, dict):
                     id_list = [id_list]
                 for id_elem in id_list:
-                    if (
-                        isinstance(id_elem, dict)
-                        and id_elem.get("IdType") == "doi"
-                    ):
-                        doi = id_elem.get("Id") or id_elem.get("#text", "")
-                        if doi:
-                            return doi
+                    if isinstance(id_elem, dict) and id_elem.get("IdType") == "doi":
+                        doi_value = str(id_elem.get("Id") or id_elem.get("#text", ""))
+                        if doi_value:
+                            return doi_value
 
             return None
         except Exception as e:
-            self.logger.warning(
-                f"Failed to get DOI for PMID {pmid}: {e}"
-            )
+            self.logger.warning(f"Failed to get DOI for PMID {pmid}: {e}")
             return None
 
     def _clean_html(self, text: str) -> str:

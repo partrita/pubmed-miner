@@ -2,11 +2,10 @@
 Paper scoring and ranking engine.
 """
 
-import math
 import logging
-from datetime import datetime
-from typing import List, Dict, Optional, Union
+import math
 from dataclasses import replace
+from datetime import datetime
 
 from ..models import Paper, ScoredPaper, ScoringWeights
 
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 class ScoringEngine:
     """Engine for calculating paper importance scores and ranking papers."""
 
-    def __init__(self, weights: Optional[ScoringWeights] = None):
+    def __init__(self, weights: ScoringWeights | None = None):
         """Initialize scoring engine.
 
         Args:
@@ -28,9 +27,9 @@ class ScoringEngine:
     def calculate_paper_score(
         self,
         paper: Paper,
-        citations: Optional[int],
+        citations: int | None,
         impact_factor: float,
-        query: Optional[str] = None,
+        query: str | None = None,
     ) -> float:
         """Calculate comprehensive score for a paper.
 
@@ -66,7 +65,7 @@ class ScoringEngine:
 
         return min(100.0, max(0.0, total_score))
 
-    def rank_papers(self, papers: List[ScoredPaper]) -> List[ScoredPaper]:
+    def rank_papers(self, papers: list[ScoredPaper]) -> list[ScoredPaper]:
         """Rank papers by score and assign rank numbers.
 
         Args:
@@ -91,8 +90,8 @@ class ScoringEngine:
         return ranked_papers
 
     def select_essential_papers(
-        self, papers: List[ScoredPaper], count: int = 15
-    ) -> List[ScoredPaper]:
+        self, papers: list[ScoredPaper], count: int = 15
+    ) -> list[ScoredPaper]:
         """Select top essential papers based on scores.
 
         Args:
@@ -119,11 +118,11 @@ class ScoringEngine:
 
     def score_paper_batch(
         self,
-        papers: List[Paper],
-        citations: Dict[str, int],
-        impact_factors: Dict[str, float],
-        query: Optional[str] = None,
-    ) -> List[ScoredPaper]:
+        papers: list[Paper],
+        citations: dict[str, int],
+        impact_factors: dict[str, float],
+        query: str | None = None,
+    ) -> list[ScoredPaper]:
         """Score a batch of papers efficiently.
 
         Args:
@@ -182,7 +181,7 @@ class ScoringEngine:
         logger.info(f"Scored {len(scored_papers)} papers successfully")
         return scored_papers
 
-    def _calculate_citation_score(self, citations: Optional[int]) -> float:
+    def _calculate_citation_score(self, citations: int | None) -> float:
         """Calculate normalized citation score (0-100).
 
         Args:
@@ -258,7 +257,7 @@ class ScoringEngine:
             score = 100.0 - (90.0 * age_days / max_age_days)
             return max(10.0, score)
 
-    def _calculate_relevance_score(self, paper: Paper, query: Optional[str]) -> float:
+    def _calculate_relevance_score(self, paper: Paper, query: str | None) -> float:
         """Calculate relevance score based on query match (0-100).
 
         Args:
@@ -291,7 +290,7 @@ class ScoringEngine:
 
         return min(100.0, relevance_score)
 
-    def _extract_query_terms(self, query: str) -> List[str]:
+    def _extract_query_terms(self, query: str) -> list[str]:
         """Extract meaningful terms from search query.
 
         Args:
@@ -335,7 +334,7 @@ class ScoringEngine:
 
         return " ".join(part for part in parts if part).lower()
 
-    def _count_term_matches(self, text: str, terms: List[str]) -> int:
+    def _count_term_matches(self, text: str, terms: list[str]) -> int:
         """Count how many query terms appear in text.
 
         Args:
@@ -391,8 +390,8 @@ class ScoringEngine:
         return normalized
 
     def get_score_breakdown(
-        self, scored_paper: ScoredPaper, query: Optional[str] = None
-    ) -> Dict[str, float]:
+        self, scored_paper: ScoredPaper, query: str | None = None
+    ) -> dict[str, float]:
         """Get detailed score breakdown for a paper.
 
         Args:
@@ -431,8 +430,8 @@ class ScoringEngine:
         logger.info(f"Updated scoring weights: {self.weights}")
 
     def get_scoring_statistics(
-        self, scored_papers: List[ScoredPaper]
-    ) -> Dict[str, float]:
+        self, scored_papers: list[ScoredPaper]
+    ) -> dict[str, float]:
         """Get statistics about scored papers.
 
         Args:
@@ -457,9 +456,9 @@ class ScoringEngine:
             "min_score": min(scores),
             "average_citations": sum(citations) / len(citations) if citations else 0,
             "max_citations": max(citations) if citations else 0,
-            "average_impact_factor": sum(impact_factors) / len(impact_factors)
-            if impact_factors
-            else 0,
+            "average_impact_factor": (
+                sum(impact_factors) / len(impact_factors) if impact_factors else 0
+            ),
             "max_impact_factor": max(impact_factors) if impact_factors else 0,
             "papers_with_impact_factor": len(impact_factors),
             "papers_with_citations": len([c for c in citations if c > 0]),
@@ -467,7 +466,7 @@ class ScoringEngine:
 
         return stats
 
-    def _safe_int_value(self, value: Union[int, None, str], default: int = 0) -> int:
+    def _safe_int_value(self, value: int | None | str, default: int = 0) -> int:
         """Safely convert value to integer, handling None and invalid values.
 
         Args:
@@ -488,7 +487,7 @@ class ScoringEngine:
             return default
 
     def _safe_float_value(
-        self, value: Union[float, None, str], default: float = 0.0
+        self, value: float | None | str, default: float = 0.0
     ) -> float:
         """Safely convert value to float, handling None and invalid values.
 

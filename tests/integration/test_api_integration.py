@@ -2,15 +2,21 @@
 Integration tests for external API interactions.
 """
 
-import pytest
 import os
-from unittest.mock import Mock, patch
 from datetime import datetime
+from unittest.mock import Mock, patch
 
-from src.pubmed_miner.services.paper_collection import PaperCollectionService
+import pytest
+import requests
+
+from src.pubmed_miner.models import GitHubConfig, ScoredPaper
 from src.pubmed_miner.services.citation_service import CitationService
 from src.pubmed_miner.services.github_manager import GitHubIssuesManager
-from src.pubmed_miner.models import GitHubConfig, ScoredPaper
+from src.pubmed_miner.services.paper_collection import PaperCollectionService
+
+
+class SimulatedAPIFailure(Exception):
+    """Simulated API failure used by integration tests."""
 
 
 class TestPubMedAPIIntegration:
@@ -76,20 +82,20 @@ class TestPubMedAPIIntegration:
         # Test that rate limiting is properly implemented
         import time
 
-        with patch(
-            "src.pubmed_miner.services.paper_collection.time.sleep"
-        ) as mock_sleep:
-            with patch.object(self.service, "search_papers") as mock_request:
-                mock_request.return_value = []
+        with (
+            patch("src.pubmed_miner.services.paper_collection.time.sleep"),
+            patch.object(self.service, "search_papers") as mock_request,
+        ):
+            mock_request.return_value = []
 
-                # Make multiple rapid requests
-                start_time = time.time()
-                for i in range(3):
-                    self.service.search_papers(f"test query {i}")
-                end_time = time.time()
+            # Make multiple rapid requests
+            start_time = time.time()
+            for i in range(3):
+                self.service.search_papers(f"test query {i}")
+            end_time = time.time()
 
-                # search_papers is mocked, so no actual rate limiting occurs
-                assert end_time - start_time < 1.0
+            # search_papers is mocked, so no actual rate limiting occurs
+            assert end_time - start_time < 1.0
 
 
 class TestCitationAPIIntegration:
@@ -121,7 +127,12 @@ class TestCitationAPIIntegration:
         # Use a known PMID for testing
         test_pmid = "33057194"
 
-        count = self.service._fetch_from_semantic_scholar(test_pmid)
+        try:
+            count = self.service._fetch_from_semantic_scholar(test_pmid)
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 429:
+                pytest.skip("Semantic Scholar API rate limited")
+            raise
 
         # Should return a non-negative integer or None
         assert count is None or (isinstance(count, int) and count >= 0)
@@ -131,9 +142,14 @@ class TestCitationAPIIntegration:
         with patch(
             "src.pubmed_miner.services.citation_service.requests.get"
         ) as mock_get:
-            # Mock Crossref failure
+            # Mock Crossref failure (404 -> raise_for_status raises HTTPError)
             crossref_response = Mock()
             crossref_response.status_code = 404
+            crossref_response.raise_for_status.side_effect = (
+                requests.exceptions.HTTPError(
+                    "404 Client Error", response=crossref_response
+                )
+            )
 
             # Mock Semantic Scholar success
             semantic_response = Mock()
@@ -152,10 +168,15 @@ class TestCitationAPIIntegration:
         with patch(
             "src.pubmed_miner.services.citation_service.requests.get"
         ) as mock_get:
-            # Mock rate limit response
+            # Mock rate limit response (raise_for_status raises HTTPError)
             rate_limit_response = Mock()
             rate_limit_response.status_code = 429
             rate_limit_response.headers = {"Retry-After": "1"}
+            rate_limit_response.raise_for_status.side_effect = (
+                requests.exceptions.HTTPError(
+                    "429 Too Many Requests", response=rate_limit_response
+                )
+            )
 
             success_response = Mock()
             success_response.status_code = 200
@@ -213,6 +234,9 @@ class TestGitHubAPIIntegration:
             mock_response = Mock()
             mock_response.status_code = 401
             mock_response.text = "Bad credentials"
+            mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+                "401 Client Error: Unauthorized", response=mock_response
+            )
             mock_get.return_value = mock_response
 
             from src.pubmed_miner.utils.error_handler import GitHubError
@@ -231,6 +255,9 @@ class TestGitHubAPIIntegration:
                 "X-RateLimit-Reset": str(int(datetime.now().timestamp()) + 3600),
             }
             mock_response.json.return_value = {"message": "API rate limit exceeded"}
+            mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+                "403 Client Error: Forbidden", response=mock_response
+            )
             mock_get.return_value = mock_response
 
             from src.pubmed_miner.utils.error_handler import GitHubError
@@ -254,7 +281,7 @@ class TestGitHubAPIIntegration:
             )
         ]
 
-        with patch.object(self.manager, "_find_existing_issue") as mock_find:
+        with patch.object(self.manager, "find_existing_issue_for_date") as mock_find:
             mock_find.return_value = None  # No existing issue
 
             with patch.object(self.manager, "_create_issue") as mock_create:
@@ -275,7 +302,8 @@ class TestGitHubAPIIntegration:
                 # Verify create_issue was called with formatted content
                 mock_create.assert_called_once()
                 call_args = mock_create.call_args[0]
-                assert call_args[0] == "test-topic"
+                # Title uses dated format: "<YYYY-MM-DD>: <topic> papers"
+                assert "test-topic" in call_args[0]
                 assert (
                     "Test Paper" in call_args[1]
                 )  # Issue body should contain paper title
@@ -296,7 +324,7 @@ class TestGitHubAPIIntegration:
             )
         ]
 
-        with patch.object(self.manager, "_find_existing_issue") as mock_find:
+        with patch.object(self.manager, "find_existing_issue_for_date") as mock_find:
             mock_find.return_value = {
                 "number": 42,
                 "title": "[Essential Papers] test-topic",
@@ -321,8 +349,9 @@ class TestGitHubAPIIntegration:
                 # Verify update_issue was called
                 mock_update.assert_called_once()
                 call_args = mock_update.call_args[0]
-                assert call_args[0] == 42  # Issue number
-                assert "Updated Paper" in call_args[1]  # Updated content
+                assert call_args[0]["number"] == 42  # Existing issue data
+                # Papers passed for body regeneration
+                assert call_args[1][0].title == "Updated Paper"
 
 
 class TestAPIIntegrationResilience:
@@ -342,7 +371,7 @@ class TestAPIIntegrationResilience:
                 # Citation service also has intermittent failures
                 def citation_side_effect(pmid, **kwargs):
                     if pmid == "12345":
-                        raise Exception("Citation API timeout")
+                        raise SimulatedAPIFailure("Citation API timeout")
                     return 100
 
                 mock_citations.side_effect = citation_side_effect

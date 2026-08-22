@@ -2,9 +2,10 @@
 Enhanced paper details collection service.
 """
 
-import re
 import logging
-from typing import Dict, List, Optional
+import re
+from typing import Any, cast
+
 from Bio import Entrez
 
 from ..models import Paper
@@ -23,10 +24,10 @@ class PaperDetailsService:
             email: Email address for Entrez API
         """
         self.email = email
-        Entrez.email = self.email
+        Entrez.email = self.email  # type: ignore[assignment]
 
     @retry_api_calls(max_attempts=3, delay=1.0)
-    def enrich_paper_data(self, papers: List[Paper]) -> List[Paper]:
+    def enrich_paper_data(self, papers: list[Paper]) -> list[Paper]:
         """Enrich paper data with additional metadata.
 
         Args:
@@ -65,7 +66,7 @@ class PaperDetailsService:
         additional_data = self._fetch_additional_metadata(paper.pmid)
 
         # Create enriched paper with updated data
-        enriched_data = {
+        enriched_data: dict[str, Any] = {
             "pmid": paper.pmid,
             "title": self._clean_title(paper.title),
             "authors": self._normalize_authors(paper.authors),
@@ -80,7 +81,7 @@ class PaperDetailsService:
         return Paper(**enriched_data)
 
     @retry_api_calls(max_attempts=2, delay=0.5)
-    def _fetch_additional_metadata(self, pmid: str) -> Dict[str, Optional[str]]:
+    def _fetch_additional_metadata(self, pmid: str) -> dict[str, str | None]:
         """Fetch additional metadata for a paper.
 
         Args:
@@ -102,18 +103,21 @@ class PaperDetailsService:
 
             record = records["PubmedArticle"][0]
 
-            return {
-                "abstract": self._extract_full_abstract(record),
-                "doi": self._extract_doi_comprehensive(record),
-                "keywords": self._extract_keywords(record),
-                "mesh_terms": self._extract_mesh_terms(record),
-            }
+            return cast(
+                dict[str, str | None],
+                {
+                    "abstract": self._extract_full_abstract(record),
+                    "doi": self._extract_doi_comprehensive(record),
+                    "keywords": self._extract_keywords(record),
+                    "mesh_terms": self._extract_mesh_terms(record),
+                },
+            )
 
         except Exception as e:
             logger.warning(f"Failed to fetch additional metadata for {pmid}: {e}")
             return {}
 
-    def _extract_full_abstract(self, record: Dict) -> Optional[str]:
+    def _extract_full_abstract(self, record: dict) -> str | None:
         """Extract complete abstract including structured abstracts.
 
         Args:
@@ -149,7 +153,7 @@ class PaperDetailsService:
             logger.warning(f"Error extracting full abstract: {e}")
             return None
 
-    def _extract_doi_comprehensive(self, record: Dict) -> Optional[str]:
+    def _extract_doi_comprehensive(self, record: dict) -> str | None:
         """Extract DOI using multiple methods.
 
         Args:
@@ -164,24 +168,26 @@ class PaperDetailsService:
             # Method 1: ELocationID
             elocation_ids = article.get("ELocationID", [])
             for elocation in elocation_ids:
-                if hasattr(elocation, "attributes"):
-                    if elocation.attributes.get("EIdType") == "doi":
-                        return str(elocation)
+                if hasattr(elocation, "attributes") and elocation.attributes.get(
+                    "EIdType"
+                ) == "doi":
+                    return str(elocation)
 
             # Method 2: ArticleIdList in PubmedData
             if "PubmedData" in record:
                 article_ids = record["PubmedData"].get("ArticleIdList", [])
                 for article_id in article_ids:
-                    if hasattr(article_id, "attributes"):
-                        if article_id.attributes.get("IdType") == "doi":
-                            return str(article_id)
+                    if hasattr(article_id, "attributes") and article_id.attributes.get(
+                        "IdType"
+                    ) == "doi":
+                        return str(article_id)
 
         except Exception as e:
             logger.warning(f"Error extracting DOI: {e}")
 
         return None
 
-    def _extract_keywords(self, record: Dict) -> List[str]:
+    def _extract_keywords(self, record: dict) -> list[str]:
         """Extract keywords from the record.
 
         Args:
@@ -206,7 +212,7 @@ class PaperDetailsService:
 
         return keywords
 
-    def _extract_mesh_terms(self, record: Dict) -> List[str]:
+    def _extract_mesh_terms(self, record: dict) -> list[str]:
         """Extract MeSH terms from the record.
 
         Args:
@@ -253,7 +259,7 @@ class PaperDetailsService:
 
         return title
 
-    def _normalize_authors(self, authors: List[str]) -> List[str]:
+    def _normalize_authors(self, authors: list[str]) -> list[str]:
         """Normalize author names.
 
         Args:
@@ -311,7 +317,7 @@ class PaperDetailsService:
 
         return journal.strip()
 
-    def _clean_abstract(self, abstract: Optional[str]) -> Optional[str]:
+    def _clean_abstract(self, abstract: str | None) -> str | None:
         """Clean and normalize abstract text.
 
         Args:
@@ -382,7 +388,7 @@ class PaperDetailsService:
 
         return min(1.0, relevance_score)
 
-    def _extract_query_terms(self, query: str) -> List[str]:
+    def _extract_query_terms(self, query: str) -> list[str]:
         """Extract meaningful terms from search query.
 
         Args:
@@ -427,7 +433,7 @@ class PaperDetailsService:
 
         return " ".join(part for part in parts if part)
 
-    def _calculate_text_relevance(self, text: str, query_terms: List[str]) -> float:
+    def _calculate_text_relevance(self, text: str, query_terms: list[str]) -> float:
         """Calculate relevance score for a text field.
 
         Args:

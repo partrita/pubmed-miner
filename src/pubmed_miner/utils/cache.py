@@ -9,15 +9,16 @@ Requirements addressed:
 - 7.5: Journal data caching and management
 """
 
-import json
-import sqlite3
-import logging
-import threading
 import hashlib
-from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Callable
+import json
+import logging
+import sqlite3
+import threading
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 from ..models.cache import CitationCache, ImpactFactorCache, PaperMetadataCache
 from .error_handler import CacheError, handle_exceptions
@@ -42,7 +43,7 @@ class CacheManager:
         self.enable_memory_cache = enable_memory_cache
 
         # Thread-safe in-memory cache
-        self._memory_cache: Dict[str, Any] = {}
+        self._memory_cache: dict[str, Any] = {}
         self._cache_lock = threading.RLock()
         self._cache_stats = {"hits": 0, "misses": 0, "memory_hits": 0, "db_hits": 0}
 
@@ -103,7 +104,7 @@ class CacheManager:
             conn.commit()
 
     @contextmanager
-    def _get_connection(self):
+    def _get_connection(self) -> Iterator[sqlite3.Connection]:
         """Get database connection with proper error handling."""
         conn = None
         try:
@@ -123,7 +124,7 @@ class CacheManager:
                 conn.close()
 
     # Citation cache methods
-    def get_citation(self, pmid: str) -> Optional[CitationCache]:
+    def get_citation(self, pmid: str) -> CitationCache | None:
         """Get citation data from cache.
 
         Args:
@@ -145,7 +146,7 @@ class CacheManager:
                         source=row["source"],
                     )
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error getting citation cache for {pmid}: {e}")
 
         return None
@@ -173,10 +174,10 @@ class CacheManager:
                 )
                 conn.commit()
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error saving citation cache for {citation.pmid}: {e}")
 
-    def batch_save_citations(self, citations: List[CitationCache]) -> None:
+    def batch_save_citations(self, citations: list[CitationCache]) -> None:
         """Save multiple citations to cache.
 
         Args:
@@ -204,7 +205,7 @@ class CacheManager:
 
                 logger.info(f"Saved {len(citations)} citations to cache")
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error batch saving citations: {e}")
 
     def clear_expired_citations(self, max_age_days: int = 7) -> int:
@@ -223,17 +224,17 @@ class CacheManager:
                 cursor = conn.execute(
                     "DELETE FROM citations WHERE last_updated < ?", (cutoff_date,)
                 )
-                cleared_count = cursor.rowcount
+                cleared_count = int(cursor.rowcount)
                 conn.commit()
 
                 return cleared_count
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error clearing expired citations: {e}")
             return 0
 
     # Impact factor cache methods
-    def get_impact_factor(self, journal_name: str) -> Optional[ImpactFactorCache]:
+    def get_impact_factor(self, journal_name: str) -> ImpactFactorCache | None:
         """Get impact factor from cache.
 
         Args:
@@ -259,7 +260,7 @@ class CacheManager:
                         source=row["source"],
                     )
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error getting impact factor cache for {journal_name}: {e}")
 
         return None
@@ -288,14 +289,14 @@ class CacheManager:
                 )
                 conn.commit()
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(
                 f"Error saving impact factor cache for {impact_factor.journal_name}: {e}"
             )
 
     def search_similar_journals(
         self, journal_name: str, limit: int = 5
-    ) -> List[ImpactFactorCache]:
+    ) -> list[ImpactFactorCache]:
         """Search for journals with similar names.
 
         Args:
@@ -331,12 +332,12 @@ class CacheManager:
 
                 return results
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error searching similar journals for {journal_name}: {e}")
             return []
 
     # Paper metadata cache methods
-    def get_paper_metadata(self, pmid: str) -> Optional[PaperMetadataCache]:
+    def get_paper_metadata(self, pmid: str) -> PaperMetadataCache | None:
         """Get paper metadata from cache.
 
         Args:
@@ -364,7 +365,7 @@ class CacheManager:
                         last_updated=row["last_updated"],
                     )
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error getting paper metadata cache for {pmid}: {e}")
 
         return None
@@ -396,11 +397,11 @@ class CacheManager:
                 )
                 conn.commit()
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error saving paper metadata cache for {metadata.pmid}: {e}")
 
     # Statistics and maintenance methods
-    def get_citation_cache_stats(self) -> Dict[str, int]:
+    def get_citation_cache_stats(self) -> dict[str, int]:
         """Get citation cache statistics.
 
         Returns:
@@ -422,11 +423,11 @@ class CacheManager:
 
                 return {"total": total, "expired": expired, "valid": total - expired}
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error getting citation cache stats: {e}")
             return {"total": 0, "expired": 0, "valid": 0}
 
-    def get_impact_factor_cache_stats(self) -> Dict[str, int]:
+    def get_impact_factor_cache_stats(self) -> dict[str, int]:
         """Get impact factor cache statistics.
 
         Returns:
@@ -448,13 +449,13 @@ class CacheManager:
 
                 return {"total": total, "expired": expired, "valid": total - expired}
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error getting impact factor cache stats: {e}")
             return {"total": 0, "expired": 0, "valid": 0}
 
     def cleanup_cache(
         self, citation_max_age: int = 7, impact_factor_max_age: int = 365
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Clean up expired cache entries.
 
         Args:
@@ -494,7 +495,7 @@ class CacheManager:
 
             logger.info(f"Cache cleanup completed: {stats}")
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error during cache cleanup: {e}")
 
         return stats
@@ -506,7 +507,7 @@ class CacheManager:
                 conn.execute("VACUUM")
                 conn.commit()
             logger.info("Database vacuum completed")
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error vacuuming database: {e}")
 
     def get_database_size(self) -> int:
@@ -517,7 +518,7 @@ class CacheManager:
         """
         try:
             return self.db_path.stat().st_size
-        except Exception as e:
+        except OSError as e:
             logger.error(f"Error getting database size: {e}")
             return 0
 
@@ -534,7 +535,7 @@ class CacheManager:
         """
         return f"{prefix}:{identifier}"
 
-    def _get_from_memory_cache(self, key: str) -> Optional[Any]:
+    def _get_from_memory_cache(self, key: str) -> Any | None:
         """Get item from memory cache.
 
         Args:
@@ -579,7 +580,7 @@ class CacheManager:
             self._memory_cache.clear()
             logger.info("Memory cache cleared")
 
-    def get_cache_statistics(self) -> Dict[str, Any]:
+    def get_cache_statistics(self) -> dict[str, Any]:
         """Get comprehensive cache statistics.
 
         Returns:
@@ -614,7 +615,7 @@ class CacheManager:
         }
 
     def export_cache_data(
-        self, output_file: str, table_name: Optional[str] = None
+        self, output_file: str, table_name: str | None = None
     ) -> None:
         """Export cache data to JSON file.
 
@@ -630,11 +631,7 @@ class CacheManager:
                 if table_name and table_name not in valid_tables:
                     raise CacheError(f"Invalid table name: {table_name}")
 
-                tables = (
-                    [table_name]
-                    if table_name
-                    else valid_tables
-                )
+                tables = [table_name] if table_name else valid_tables
 
                 for table in tables:
                     if table not in valid_tables:
@@ -644,7 +641,7 @@ class CacheManager:
                     export_data[table] = [dict(row) for row in rows]
 
             # Convert datetime objects to strings for JSON serialization
-            def datetime_converter(obj):
+            def datetime_converter(obj: Any) -> str:
                 if isinstance(obj, datetime):
                     return obj.isoformat()
                 raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
@@ -660,13 +657,15 @@ class CacheManager:
 
             logger.info(f"Cache data exported to {output_file}")
 
-        except Exception as e:
+        except CacheError:
+            raise
+        except (OSError, TypeError, ValueError, sqlite3.Error) as e:
             logger.error(f"Error exporting cache data: {e}")
             raise CacheError(f"Failed to export cache data: {e}")
 
     def import_cache_data(
         self, input_file: str, overwrite: bool = False
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Import cache data from JSON file.
 
         Args:
@@ -690,14 +689,15 @@ class CacheManager:
                     for row in rows:
                         # Convert ISO datetime strings back to datetime objects
                         for key, value in row.items():
-                            if key.endswith("_updated") or key == "publication_date":
-                                if isinstance(value, str):
-                                    try:
-                                        row[key] = datetime.fromisoformat(
-                                            value.replace("Z", "+00:00")
-                                        )
-                                    except ValueError:
-                                        pass
+                            if (
+                                key.endswith("_updated") or key == "publication_date"
+                            ) and isinstance(value, str):
+                                try:
+                                    row[key] = datetime.fromisoformat(
+                                        value.replace("Z", "+00:00")
+                                    )
+                                except ValueError:
+                                    pass
 
                         # Insert or replace based on overwrite setting
                         operation = (
@@ -761,7 +761,7 @@ class CacheManager:
             logger.info(f"Cache data imported: {stats}")
             return stats
 
-        except Exception as e:
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as e:
             logger.error(f"Error importing cache data: {e}")
             raise CacheError(f"Failed to import cache data: {e}")
 
@@ -779,7 +779,7 @@ class CacheManager:
 
             logger.info("Database optimization completed")
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error optimizing database: {e}")
             raise CacheError(f"Failed to optimize database: {e}")
 
@@ -795,7 +795,7 @@ class CacheManager:
             shutil.copy2(self.db_path, backup_path)
             logger.info(f"Database backed up to {backup_path}")
 
-        except Exception as e:
+        except OSError as e:
             logger.error(f"Error backing up database: {e}")
             raise CacheError(f"Failed to backup database: {e}")
 
@@ -823,7 +823,9 @@ def create_cache_key(prefix: str, *args: Any) -> str:
     return ":".join(key_parts)
 
 
-def cache_result(cache_manager: CacheManager, key_prefix: str, ttl_hours: int = 24):
+def cache_result(
+    cache_manager: CacheManager, key_prefix: str, ttl_hours: int = 24
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator to cache function results.
 
     Args:
@@ -832,8 +834,8 @@ def cache_result(cache_manager: CacheManager, key_prefix: str, ttl_hours: int = 
         ttl_hours: Time to live in hours
     """
 
-    def decorator(func: Callable) -> Callable:
-        def wrapper(*args, **kwargs) -> Any:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Create cache key from function arguments
             cache_key = create_cache_key(key_prefix, func.__name__, args, kwargs)
 

@@ -52,3 +52,10 @@ topics:
     max_papers: 100
     essential_count: 3
     enabled: false  # Disabled example
+
+  # Cyclic Peptide
+  - name: "cyclic-peptide"
+    query: "cyclic peptide"
+    max_papers: 100
+    essential_count: 3
+    enabled: true

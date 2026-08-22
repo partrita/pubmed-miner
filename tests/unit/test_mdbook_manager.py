@@ -1,7 +1,8 @@
-import pytest
 from datetime import datetime
-from src.pubmed_miner.services.mdbook_manager import MdBookManager
+
 from src.pubmed_miner.models.paper import ScoredPaper
+from src.pubmed_miner.services.mdbook_manager import MdBookManager
+
 
 def test_xss_mitigation(tmp_path):
     manager = MdBookManager(book_root=str(tmp_path / "book_test"))
@@ -14,7 +15,7 @@ def test_xss_mitigation(tmp_path):
         abstract="<script>alert('abstract')</script>",
         doi="10.123/456",
         score=1.0,
-        rank=1
+        rank=1,
     )
     content = manager._format_page_content("Topic", [paper], datetime.now())
     assert "<script>" not in content
@@ -22,6 +23,7 @@ def test_xss_mitigation(tmp_path):
     assert "&lt;script&gt;alert(&#x27;author&#x27;)&lt;/script&gt;" in content
     assert "&lt;script&gt;alert(&#x27;journal&#x27;)&lt;/script&gt;" in content
     assert "&lt;script&gt;alert(&#x27;abstract&#x27;)&lt;/script&gt;" in content
+
 
 def test_update_monthly_page_sanitizes_xss(tmp_path):
     """Verify that update_monthly_page sanitizes external input to prevent XSS."""
@@ -39,7 +41,7 @@ def test_update_monthly_page_sanitizes_xss(tmp_path):
         score=90.0,
         rank=1,
         doi="10.1234/\"><script>alert('doi')</script>",
-        topic="normal-topic"
+        topic="normal-topic",
     )
 
     malicious_topic = "<script>alert('topic')</script>"
@@ -58,7 +60,13 @@ def test_update_monthly_page_sanitizes_xss(tmp_path):
     # Verify that malicious inputs were escaped
     assert "<script>" not in content
     assert "&lt;script&gt;alert(&#x27;pmid&#x27;)&lt;/script&gt;" in content
-    assert "&lt;script&gt;alert(&#x27;title&#x27;)&lt;/script&gt; &amp; Normal Title \\| With Pipe" in content
-    assert "&lt;script&gt;alert(&#x27;journal&#x27;)&lt;/script&gt; Malicious Journal" in content
+    assert (
+        "&lt;script&gt;alert(&#x27;title&#x27;)&lt;/script&gt; &amp; Normal Title \\| With Pipe"
+        in content
+    )
+    assert (
+        "&lt;script&gt;alert(&#x27;journal&#x27;)&lt;/script&gt; Malicious Journal"
+        in content
+    )
     assert "&lt;script&gt;alert(&#x27;doi&#x27;)&lt;/script&gt;" in content
     assert "&lt;script&gt;alert(&#x27;topic&#x27;)&lt;/script&gt;" in content

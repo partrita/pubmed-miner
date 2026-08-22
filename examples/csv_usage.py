@@ -16,7 +16,7 @@ from src.pubmed_miner.utils import CSVManager
 
 def example_save_basic_papers():
     """Example: Save basic paper collection to CSV."""
-    
+
     # Create sample papers with topic information
     papers = [
         Paper(
@@ -40,7 +40,7 @@ def example_save_basic_papers():
             topic="ai-drug-discovery",
         ),
     ]
-    
+
     # Save to CSV
     output_path = Path("data/collections.csv")
     CSVManager.save_papers(papers, str(output_path))
@@ -49,7 +49,7 @@ def example_save_basic_papers():
 
 def example_save_scored_papers():
     """Example: Save scored papers to CSV with ranking information."""
-    
+
     # Create sample scored papers with topic information
     papers = [
         ScoredPaper(
@@ -79,7 +79,7 @@ def example_save_scored_papers():
             topic="de-novo-protein-design",
         ),
     ]
-    
+
     # Save with scoring information
     output_path = Path("data/collections.csv")
     CSVManager.update_collection(papers, str(output_path))
@@ -88,7 +88,7 @@ def example_save_scored_papers():
 
 def example_append_papers():
     """Example: Append new papers to existing CSV."""
-    
+
     papers = [
         Paper(
             pmid="99999999",
@@ -100,7 +100,7 @@ def example_append_papers():
             topic="bioinformatics",
         ),
     ]
-    
+
     output_path = Path("data/collections.csv")
     CSVManager.append_papers(papers, str(output_path))
     print(f"✓ Appended {len(papers)} papers to {output_path}")
@@ -108,32 +108,32 @@ def example_append_papers():
 
 def example_load_papers():
     """Example: Load papers from existing CSV."""
-    
+
     input_path = Path("data/collections.csv")
     papers = CSVManager.load_papers(str(input_path))
     print(f"✓ Loaded {len(papers)} papers from {input_path}")
-    
+
     # Display first paper
     if papers:
-        print(f"\nFirst paper:")
+        print("\nFirst paper:")
         for key, value in papers[0].items():
             print(f"  {key}: {value}")
 
 
 if __name__ == "__main__":
     print("📊 Paper Collection CSV Examples\n")
-    
+
     # Run examples
     print("1. Saving basic papers...")
     example_save_basic_papers()
-    
+
     print("\n2. Saving scored papers with ranking...")
     example_save_scored_papers()
-    
+
     print("\n3. Appending additional papers...")
     example_append_papers()
-    
+
     print("\n4. Loading papers from CSV...")
     example_load_papers()
-    
+
     print("\n✓ All examples completed!")

@@ -4,7 +4,6 @@ Data models for paper-related structures.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
 
 
 @dataclass
@@ -13,14 +12,14 @@ class Paper:
 
     pmid: str
     title: str
-    authors: List[str]
+    authors: list[str]
     journal: str
     publication_date: datetime
-    abstract: Optional[str] = None
-    doi: Optional[str] = None
-    topic: Optional[str] = None
+    abstract: str | None = None
+    doi: str | None = None
+    topic: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate paper data after initialization."""
         if not self.pmid:
             raise ValueError("PMID cannot be empty")
@@ -41,7 +40,7 @@ class ScoredPaper(Paper):
     score: float = 0.0
     rank: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate scored paper data."""
         super().__post_init__()
         if self.citation_count < 0:

@@ -3,11 +3,11 @@ CSV management utilities for saving and loading paper collection data.
 """
 
 import csv
-import os
 import logging
-from pathlib import Path
-from typing import List, Dict, Optional
+from collections.abc import Sequence
 from datetime import datetime
+from pathlib import Path
+from typing import Any, ClassVar
 
 from ..models import Paper, ScoredPaper
 
@@ -18,7 +18,7 @@ class CSVManager:
     """Manager for handling CSV operations on paper collections."""
 
     # CSV column headers
-    HEADERS = [
+    HEADERS: ClassVar[list[str]] = [
         "pmid",
         "title",
         "authors",
@@ -38,8 +38,8 @@ class CSVManager:
 
     @staticmethod
     def save_papers(
-        papers: List[Paper],
-        filepath: str,
+        papers: Sequence[Paper],
+        filepath: str | Path,
         include_scoring: bool = False,
         append: bool = False,
     ) -> None:
@@ -58,18 +58,18 @@ class CSVManager:
         if not papers:
             raise ValueError("Papers list cannot be empty")
 
-        filepath = Path(filepath)
+        path = Path(filepath)
 
         # Create parent directories if needed
-        filepath.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
 
         # Determine headers and check if we should include scoring
         headers = CSVManager.SCORED_HEADERS if include_scoring else CSVManager.HEADERS
-        mode = "a" if append and filepath.exists() else "w"
-        write_header = mode == "w" or not filepath.exists()
+        mode = "a" if append and path.exists() else "w"
+        write_header = mode == "w" or not path.exists()
 
         try:
-            with open(filepath, mode=mode, newline="", encoding="utf-8") as csvfile:
+            with open(path, mode=mode, newline="", encoding="utf-8") as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=headers)
 
                 # Write header only if creating new file or file is empty
@@ -83,19 +83,19 @@ class CSVManager:
 
             file_mode = "appended to" if append and mode == "a" else "created"
             logger.info(
-                f"Successfully {file_mode} CSV file: {filepath} "
+                f"Successfully {file_mode} CSV file: {path} "
                 f"({len(papers)} papers saved)"
             )
 
-        except IOError as e:
-            logger.error(f"Error writing to CSV file {filepath}: {e}")
-            raise IOError(f"Failed to save papers to CSV: {e}")
+        except OSError as e:
+            logger.error(f"Error writing to CSV file {path}: {e}")
+            raise OSError(f"Failed to save papers to CSV: {e}")
         except Exception as e:
             logger.error(f"Unexpected error saving papers to CSV: {e}")
             raise
 
     @staticmethod
-    def load_papers(filepath: str) -> List[Dict]:
+    def load_papers(filepath: str | Path) -> list[dict[str, str]]:
         """Load papers from a CSV file.
 
         Args:
@@ -108,31 +108,30 @@ class CSVManager:
             FileNotFoundError: If file does not exist
             IOError: If file operation fails
         """
-        filepath = Path(filepath)
+        path = Path(filepath)
 
-        if not filepath.exists():
-            raise FileNotFoundError(f"CSV file not found: {filepath}")
+        if not path.exists():
+            raise FileNotFoundError(f"CSV file not found: {path}")
 
-        papers = []
+        papers: list[dict[str, Any]] = []
 
         try:
-            with open(filepath, mode="r", newline="", encoding="utf-8") as csvfile:
+            with open(path, mode="r", newline="", encoding="utf-8") as csvfile:
                 reader = csv.DictReader(csvfile)
-                for row in reader:
-                    papers.append(row)
+                papers.extend(reader)
 
-            logger.info(f"Successfully loaded {len(papers)} papers from {filepath}")
+            logger.info(f"Successfully loaded {len(papers)} papers from {path}")
             return papers
 
-        except IOError as e:
-            logger.error(f"Error reading CSV file {filepath}: {e}")
-            raise IOError(f"Failed to load papers from CSV: {e}")
+        except OSError as e:
+            logger.error(f"Error reading CSV file {path}: {e}")
+            raise OSError(f"Failed to load papers from CSV: {e}")
         except Exception as e:
             logger.error(f"Unexpected error loading papers from CSV: {e}")
             raise
 
     @staticmethod
-    def _paper_to_dict(paper: Paper, include_scoring: bool = False) -> Dict:
+    def _paper_to_dict(paper: Paper, include_scoring: bool = False) -> dict[str, Any]:
         """Convert a Paper object to a dictionary for CSV writing.
 
         Args:
@@ -152,7 +151,7 @@ class CSVManager:
             else str(paper.publication_date)
         )
 
-        row = {
+        row: dict[str, Any] = {
             "pmid": paper.pmid,
             "title": paper.title,
             "authors": authors_str,
@@ -178,22 +177,22 @@ class CSVManager:
         for key, value in row.items():
             if isinstance(value, str) and value:
                 stripped_value = value.lstrip()
-                if stripped_value and stripped_value[0] in ('=', '+', '-', '@'):
+                if stripped_value and stripped_value[0] in ("=", "+", "-", "@"):
                     row[key] = f"'{value}"
 
         return row
 
     @staticmethod
     def upsert_papers(
-        papers: List[Paper],
-        filepath: str,
-        include_scoring: bool = False
+        papers: Sequence[Paper],
+        filepath: str | Path,
+        include_scoring: bool = False,
     ) -> None:
         """Update or insert papers into the CSV file.
-        
+
         If a paper with the same PMID exists, it is updated (overwritten).
         If it does not exist, it is added.
-        
+
         Args:
             papers: List of Paper or ScoredPaper objects to upsert
             filepath: Path to the CSV file
@@ -203,13 +202,13 @@ class CSVManager:
             logger.warning("No papers provided for upsert.")
             return
 
-        filepath = Path(filepath)
-        
+        path = Path(filepath)
+
         # Dictionary to hold all papers: {pmid: paper_dict}
-        all_papers_map = {}
+        all_papers_map: dict[str, dict[str, Any]] = {}
 
         # 1. Load existing papers if file exists
-        if filepath.exists():
+        if path.exists():
             try:
                 existing_rows = CSVManager.load_papers(str(filepath))
                 for row in existing_rows:
@@ -217,7 +216,9 @@ class CSVManager:
                     if pmid:
                         all_papers_map[pmid] = row
             except Exception as e:
-                logger.warning(f"Could not load existing papers for upsert: {e}. Starting fresh.")
+                logger.warning(
+                    f"Could not load existing papers for upsert: {e}. Starting fresh."
+                )
 
         # 2. Update with new papers
         for paper in papers:
@@ -225,35 +226,37 @@ class CSVManager:
             pmid = paper_dict.get("pmid")
             if pmid:
                 all_papers_map[pmid] = paper_dict
-        
+
         # 3. Convert back to list and save (overwrite file)
         # We need to reconstruct ScoredPaper/Paper objects or just write dicts directly?
         # save_papers takes List[Paper]. But here we have dicts.
         # We can write dicts directly if we use DictWriter, which save_papers does but it expects objects.
-        
+
         # Let's create a specialized internal writer or modify save_papers to accept dicts?
         # Or just write it here to avoid object reconstruction overhead.
-        
+
         headers = CSVManager.SCORED_HEADERS if include_scoring else CSVManager.HEADERS
-        
+
         try:
-            with open(filepath, mode="w", newline="", encoding="utf-8") as csvfile:
+            with open(path, mode="w", newline="", encoding="utf-8") as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=headers)
                 writer.writeheader()
-                
+
                 for pmid, row in all_papers_map.items():
                     # Ensure row has all headers
                     safe_row = {k: row.get(k, "") for k in headers}
                     writer.writerow(safe_row)
-                    
-            logger.info(f"Successfully upserted papers to {filepath}. Total count: {len(all_papers_map)}")
-            
-        except IOError as e:
-            logger.error(f"Error writing to CSV file {filepath}: {e}")
-            raise IOError(f"Failed to save papers to CSV: {e}")
+
+            logger.info(
+                f"Successfully upserted papers to {path}. Total count: {len(all_papers_map)}"
+            )
+
+        except OSError as e:
+            logger.error(f"Error writing to CSV file {path}: {e}")
+            raise OSError(f"Failed to save papers to CSV: {e}")
 
     @staticmethod
-    def append_papers(papers: List[Paper], filepath: str) -> None:
+    def append_papers(papers: Sequence[Paper], filepath: str | Path) -> None:
         """Append papers to an existing CSV file (Upsert mode).
 
         This now uses upsert semantics: if a paper exists, it updates it.
@@ -266,7 +269,7 @@ class CSVManager:
 
     @staticmethod
     def update_collection(
-        papers: List[ScoredPaper], filepath: str
+        papers: Sequence[ScoredPaper], filepath: str | Path
     ) -> None:
         """Update collection with scored papers.
 

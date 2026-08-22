@@ -42,7 +42,7 @@ papers = [
         authors=["John Doe"],
         journal="Nature",
         publication_date=datetime(2024, 1, 15),
-        topic="ai-healthcare"  # 토픽 정보
+        topic="ai-healthcare",  # 토픽 정보
     )
 ]
 
@@ -66,7 +66,7 @@ CSVManager.save_papers(papers, "data/collections.csv")
 ```python
 topics = {
     "ai-drug-discovery": "machine learning AND drug discovery",
-    "cancer-immunotherapy": "cancer AND immunotherapy"
+    "cancer-immunotherapy": "cancer AND immunotherapy",
 }
 
 for topic_name, query in topics.items():
@@ -82,7 +82,8 @@ papers = CSVManager.load_papers("data/collections.csv")
 
 # 토픽별 논문 수 집계
 from collections import Counter
-topics = [p['topic'] for p in papers if p['topic']]
+
+topics = [p["topic"] for p in papers if p["topic"]]
 topic_counts = Counter(topics)
 
 print("📊 토픽별 논문 수:")

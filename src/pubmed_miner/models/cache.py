@@ -4,7 +4,6 @@ Cache data models.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 
 @dataclass
@@ -16,7 +15,7 @@ class CitationCache:
     last_updated: datetime
     source: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate citation cache data."""
         if not self.pmid:
             raise ValueError("PMID cannot be empty")
@@ -41,7 +40,7 @@ class ImpactFactorCache:
     last_updated: datetime
     source: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate impact factor cache data."""
         if not self.journal_name:
             raise ValueError("Journal name cannot be empty")
@@ -67,11 +66,11 @@ class PaperMetadataCache:
     authors_json: str  # JSON serialized list of authors
     journal: str
     publication_date: datetime
-    abstract: Optional[str]
-    doi: Optional[str]
+    abstract: str | None
+    doi: str | None
     last_updated: datetime
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate paper metadata cache."""
         if not self.pmid:
             raise ValueError("PMID cannot be empty")

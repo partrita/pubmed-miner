@@ -3,8 +3,8 @@ Extended journal database with comprehensive impact factor data.
 """
 
 import csv
-from typing import Dict, List, Optional, Tuple
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class JournalDatabase:
     """Extended database of journal impact factors and metadata."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize journal database with comprehensive data."""
         self.journals = self._load_comprehensive_journal_data()
         self.abbreviations = self._load_journal_abbreviations()
@@ -21,7 +21,7 @@ class JournalDatabase:
             f"Loaded {len(self.journals)} journals and {len(self.abbreviations)} abbreviations"
         )
 
-    def _load_comprehensive_journal_data(self) -> Dict[str, Dict]:
+    def _load_comprehensive_journal_data(self) -> dict[str, dict]:
         """Load comprehensive journal data including impact factors, categories, and metadata.
 
         Returns:
@@ -305,7 +305,7 @@ class JournalDatabase:
 
         return journal_data
 
-    def _load_journal_abbreviations(self) -> Dict[str, str]:
+    def _load_journal_abbreviations(self) -> dict[str, str]:
         """Load common journal abbreviations and their full names.
 
         Returns:
@@ -351,7 +351,7 @@ class JournalDatabase:
 
         return abbreviations
 
-    def get_journal_info(self, journal_name: str) -> Optional[Dict]:
+    def get_journal_info(self, journal_name: str) -> dict | None:
         """Get comprehensive journal information.
 
         Args:
@@ -379,7 +379,7 @@ class JournalDatabase:
 
         return None
 
-    def get_impact_factor(self, journal_name: str) -> Optional[float]:
+    def get_impact_factor(self, journal_name: str) -> float | None:
         """Get impact factor for a journal.
 
         Args:
@@ -391,7 +391,7 @@ class JournalDatabase:
         journal_info = self.get_journal_info(journal_name)
         return journal_info.get("impact_factor") if journal_info else None
 
-    def get_journals_by_category(self, category: str) -> List[Tuple[str, Dict]]:
+    def get_journals_by_category(self, category: str) -> list[tuple[str, dict]]:
         """Get all journals in a specific category.
 
         Args:
@@ -411,7 +411,7 @@ class JournalDatabase:
         matching_journals.sort(key=lambda x: x[1].get("impact_factor", 0), reverse=True)
         return matching_journals
 
-    def get_open_access_journals(self) -> List[Tuple[str, Dict]]:
+    def get_open_access_journals(self) -> list[tuple[str, dict]]:
         """Get all open access journals.
 
         Returns:
@@ -430,8 +430,8 @@ class JournalDatabase:
         return open_access_journals
 
     def get_top_journals(
-        self, limit: int = 10, category: Optional[str] = None
-    ) -> List[Tuple[str, Dict]]:
+        self, limit: int = 10, category: str | None = None
+    ) -> list[tuple[str, dict]]:
         """Get top journals by impact factor.
 
         Args:
@@ -451,7 +451,7 @@ class JournalDatabase:
 
     def search_journals(
         self, query: str, limit: int = 10
-    ) -> List[Tuple[str, Dict, float]]:
+    ) -> list[tuple[str, dict, float]]:
         """Search journals by name with similarity scores.
 
         Args:
@@ -481,7 +481,7 @@ class JournalDatabase:
         impact_factor: float,
         category: str = "unknown",
         publisher: str = "unknown",
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Add a new journal to the database.
 
@@ -529,9 +529,12 @@ class JournalDatabase:
 
                 # Sanitize string fields to prevent CSV Injection (Formula Injection)
                 row = {
-                    key: f"'{value}"
-                    if isinstance(value, str) and value.lstrip().startswith(('=', '+', '-', '@'))
-                    else value
+                    key: (
+                        f"'{value}"
+                        if isinstance(value, str)
+                        and value.lstrip().startswith(("=", "+", "-", "@"))
+                        else value
+                    )
                     for key, value in row.items()
                 }
 
@@ -567,7 +570,7 @@ class JournalDatabase:
 
     def _find_best_match(
         self, normalized_name: str, threshold: float = 0.6
-    ) -> Optional[str]:
+    ) -> str | None:
         """Find best matching journal name using fuzzy matching.
 
         Args:
@@ -582,7 +585,7 @@ class JournalDatabase:
         best_match = None
         best_score = 0.0
 
-        for journal_name in self.journals.keys():
+        for journal_name in self.journals:
             score = SequenceMatcher(None, normalized_name, journal_name).ratio()
             if score > best_score and score >= threshold:
                 best_score = score
@@ -590,14 +593,14 @@ class JournalDatabase:
 
         return best_match
 
-    def get_statistics(self) -> Dict[str, any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get database statistics.
 
         Returns:
             Dictionary with database statistics
         """
-        categories = {}
-        publishers = {}
+        categories: dict[str, int] = {}
+        publishers: dict[str, int] = {}
         open_access_count = 0
         impact_factors = []
 
@@ -624,9 +627,9 @@ class JournalDatabase:
             "categories": len(categories),
             "publishers": len(publishers),
             "open_access_journals": open_access_count,
-            "average_impact_factor": sum(impact_factors) / len(impact_factors)
-            if impact_factors
-            else 0,
+            "average_impact_factor": (
+                sum(impact_factors) / len(impact_factors) if impact_factors else 0
+            ),
             "max_impact_factor": max(impact_factors) if impact_factors else 0,
             "min_impact_factor": min(impact_factors) if impact_factors else 0,
             "top_categories": sorted(
