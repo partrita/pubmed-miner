@@ -8,18 +8,20 @@
 - 자동화된 PubMed 검색: 구성 가능한 검색 쿼리로 BioPython의 Entrez API를 사용하여 논문 검색
 - 지능형 논문 점수 매기기: 인용, 저널 임팩트 팩터, 최신성, 관련성을 고려한 다중 요소 점수 알고리즘
 - 필수 논문 선택: 각 연구 주제에 대해 가장 중요한 논문을 자동으로 식별
-- GitHub 통합: 큐레이션된 논문 목록으로 GitHub 이슈 생성 및 관리
+- MdBook & GitHub 통합: 큐레이션된 논문 목록을 MdBook 문서 사이트 및 GitHub 이슈/페이지로 배포
+- CSV 수집 및 데이터 관리: 논문 데이터를 CSV(`data/collections.csv`) 형식으로 저장, 누적 및 관리
 - 변경 추적: 새로운 논문과 순위 변경을 시간에 따라 모니터링
 
 ### 고급 기능
 - 인용 분석: 여러 소스(PMC, Crossref)에서 인용 수 수집
 - 저널 임팩트 팩터: 더 나은 논문 평가를 위한 저널 품질 지표 통합
 - 배치 처리: 속도 제한을 통한 대용량 논문 데이터셋의 효율적 처리
-- 캐싱 시스템: API 호출을 최소화하고 성능을 향상시키는 스마트 캐싱
+- 캐싱 시스템: API 호출을 최소화하고 성능을 향상시키는 스마트 캐싱 (SQLite 기반)
+- CSV 관리자 (`CSVManager`): 논문 및 점수화된 논문 데이터의 입출력/추가 지원
 - 오류 처리: 강력한 오류 복구 및 재시도 메커니즘
 
 ### 자동화 기능
-- GitHub Actions 통합: 완전 자동화된 일일 논문 수집
+- GitHub Actions 통합: 완전 자동화된 일일 논문 수집 및 MdBook 빌드/GitHub Pages 배포
 - 구성 관리: YAML 기반 주제 및 시스템 구성
 - 로깅 및 모니터링: 문제 해결 및 모니터링을 위한 포괄적 로깅
 - 유연한 스케줄링: 사용자 정의 가능한 자동화 일정
@@ -33,6 +35,7 @@
 - Requests - 외부 API용 HTTP 클라이언트
 - Pandas - 데이터 조작 및 분석
 - Python-dateutil - 고급 날짜/시간 처리
+- mdBook - 마크다운 기반 웹 문서 생성 도구
 
 ### 외부 API 및 서비스
 - PubMed/Entrez API - 논문 메타데이터 및 검색
@@ -144,7 +147,9 @@ uv run python scripts/automated_collection.py
 1. 주제와 일치하는 논문을 PubMed에서 검색
 2. 인용 및 저널 임팩트 데이터 수집
 3. 중요도에 따라 논문 점수 매기기 및 순위 지정
-4. 필수 논문 목록으로 GitHub 이슈 생성/업데이트
+4. 수집된 논문 정보를 `data/collections.csv`에 저장/누적
+5. `book_src/` 내 마크다운 페이지 생성/업데이트 (MdBook 문서 생성)
+6. 구성에 따라 필수 논문 목록으로 GitHub 이슈 생성/업데이트
 
 ## 🤖 GitHub Actions 자동화
 
@@ -154,7 +159,7 @@ uv run python scripts/automated_collection.py
 
 2. GitHub Secrets 설정:
    - 저장소 Settings → Secrets and variables → Actions로 이동
-   - `GITHUB_TOKEN` 추가 (GitHub에서 자동 제공)
+   - `GITHUB_TOKEN` 추가 (GitHub Actions 기본 제공)
    - 선택적으로 이메일과 함께 `PUBMED_EMAIL` 추가
 
 3. 워크플로우 구성:
@@ -176,8 +181,9 @@ uv run python scripts/automated_collection.py
 2. 인용, 저널 임팩트 팩터를 포함한 메타데이터 수집
 3. 가중 알고리즘을 사용하여 논문 점수 매기기
 4. 필수 논문 선택 (각 주제별 상위 N개)
-5. 형식화된 논문 목록으로 GitHub 이슈 생성/업데이트
-6. 변경 사항 추적 및 새 논문이나 순위 변경에 대한 댓글 추가
+5. `data/collections.csv` 파일에 최신 논문 데이터 저장 및 커밋
+6. `book_src/`에 주제별/월별 문서를 생성하고 mdBook 빌드 후 GitHub Pages로 자동 배포
+7. 구성 시 GitHub 이슈 생성 및 변경 사항 추적 댓글 추가
 
 ## 📊 점수 알고리즘 작동 방식
 
@@ -276,26 +282,28 @@ manager = GitHubIssuesManager(config)
 
 ```
 pubmed-miner/
-├── book_src/                   # MdBook 소스 (문서)
+├── book_src/                   # MdBook 소스 (문서 및 월별/주제별 페이지)
 ├── src/pubmed_miner/           # 메인 패키지
 │   ├── models/                 # 데이터 모델 및 구성
 │   ├── services/               # 핵심 비즈니스 로직 서비스
 │   ├── scoring/                # 논문 점수 알고리즘
-│   ├── utils/                  # 유틸리티 함수 및 헬퍼
+│   ├── utils/                  # 유틸리티 함수 (CSV, 캐시, 설정 등)
 │   └── data/                   # 정적 데이터 및 데이터베이스
 ├── tests/                      # 테스트 스위트
 │   ├── unit/                   # 단위 테스트
 │   └── integration/            # 통합 테스트
 ├── config/                     # 구성 파일
-│   ├── topics.yaml            # 연구 주제 구성
-│   └── settings.yaml          # 시스템 설정
+│   ├── topics.yaml             # 연구 주제 구성
+│   └── settings.yaml           # 시스템 설정
+├── data/                       # 수집 데이터 저장소 (collections.csv 등)
+├── examples/                   # 사용 예제 스크립트
 ├── .github/workflows/          # GitHub Actions 워크플로우
 ├── scripts/                    # 실행 스크립트
 │   ├── automated_collection.py # 메인 자동화 스크립트
-│   └── setup_automation.py    # 설정 및 검증 스크립트
-└── pyproject.toml             # 프로젝트 구성 및 의존성
+│   └── setup_automation.py     # 설정 및 검증 스크립트
+└── pyproject.toml              # 프로젝트 구성 및 의존성
 ```
-```
+
 ## 🔧 구성 참조
 
 ### 주제 구성 (`config/topics.yaml`)
@@ -573,6 +581,10 @@ uv run pytest
 - 성능 최적화 - 더 빠른 데이터 수집 및 처리
 - 문서화 - 예제, 튜토리얼, 가이드
 
+## 📚 추가 문서
+
+- [AI 가이드라인 및 개발 히스토리 (AGENTS.md)](AGENTS.md) - AI 에이전트 개발 및 보안/성능/CSV 아키텍처 가이드라인
+
 ## 📄 라이선스
 
 이 프로젝트는 MIT 라이선스 하에 라이선스됩니다 - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
@@ -610,3 +622,4 @@ uv run pytest
 연구 커뮤니티를 위해 ❤️로 제작되었습니다
 
 질문, 문제 또는 제안 사항이 있으시면 GitHub에서 [이슈를 열어주세요](https://github.com/partrita/pubmed-miner/issues).
+

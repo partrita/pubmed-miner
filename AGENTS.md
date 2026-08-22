@@ -60,21 +60,31 @@ Consolidated from the `.Jules/` memory files (`sentinel.md`, `bolt.md`, `palette
 
 ---
 
-## GitHub Copilot Contributions
+## CSV Collections & Architecture (Consolidated from Copilot Contributions)
 
-Commit `4d8d27c` ("update by copilot", 2026-01-19) implemented the CSV-based paper collection feature:
+Commit `4d8d27c` ("update by copilot", 2026-01-19) implemented the CSV-based paper collection feature and management system:
 
-- Added reference documentation: `CSV_GUIDE.md`, `IMPLEMENTATION_SUMMARY.md`
-- Added core module: `src/pubmed_miner/utils/csv_manager.py`
-- Added tests: `tests/unit/test_csv_manager.py`
-- Integrated CSV handling into:
-  - `src/pubmed_miner/services/paper_collection.py`
-  - `src/pubmed_miner/models/paper.py`
-  - `src/pubmed_miner/utils/__init__.py`
-- Updated configuration/data: `config/topics.yaml`, `data/collections.csv`
-- Usage examples (now under `examples/`): `examples/csv_usage.py`, `examples/integration.py`
+### 1. Key Components & Implementation
+- **Core Utility (`src/pubmed_miner/utils/csv_manager.py`)**:
+  - `CSVManager.save_papers(papers, filepath, include_scoring=False, append=False)`: Save papers to CSV (creates parent directory automatically).
+  - `CSVManager.append_papers(papers, filepath)`: Append new papers without duplicating headers.
+  - `CSVManager.load_papers(filepath)`: Read CSV into list of dictionaries.
+  - `CSVManager.update_collection(papers, filepath)`: Save or update with `ScoredPaper` objects.
+- **Model Integrations**:
+  - `Paper` & `ScoredPaper` (`src/pubmed_miner/models/paper.py`): Supports `topic` field for domain-specific categorization.
+  - Integration with `PaperCollectionService` and automated pipeline (`scripts/automated_collection.py`).
+- **Tests**: `tests/unit/test_csv_manager.py`
+- **Examples**: `examples/csv_usage.py`, `examples/integration.py`
 
-When modifying anything related to CSV collection/export, consult `CSV_GUIDE.md` and keep `IMPLEMENTATION_SUMMARY.md` up to date.
+### 2. CSV Schema Reference
+- **Basic Headers (`CSVManager.HEADERS`)**:
+  `pmid,title,authors,journal,publication_date,doi,abstract,topic`
+- **Scored Headers (`CSVManager.SCORED_HEADERS`)**:
+  `pmid,title,authors,journal,publication_date,doi,abstract,topic,citation_count,impact_factor,score,rank`
+- **Formatting Conventions**:
+  - `authors`: Joined with semicolon (`;`), e.g., `"John Doe; Jane Smith"`.
+  - `publication_date`: ISO 8601 formatted string (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`).
+  - Encoding: Always UTF-8.
 
 ---
 
