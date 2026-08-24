@@ -4,14 +4,14 @@ Guidelines and consolidated history for AI coding agents working on this reposit
 
 This repository has been developed with the help of multiple AI agents:
 
-- **Jules** (Google): security, performance, and accessibility improvements — session learnings recorded in `.Jules/`
+- **Jules** (Google): security, performance, and accessibility improvements — session learnings consolidated in this file
 - **GitHub Copilot**: implementation of the CSV paper-collection feature (commit `4d8d27c`, "update by copilot")
 
 ---
 
 ## Jules Learnings
 
-Consolidated from the `.Jules/` memory files (`sentinel.md`, `bolt.md`, `palette.md`). These are hard-won lessons from past sessions and must be respected in future changes.
+Consolidated from the former memory files (`sentinel.md`, `bolt.md`, `palette.md`; directories removed). These are hard-won lessons from past sessions and must be respected in future changes.
 
 ### Security (`sentinel.md`)
 
