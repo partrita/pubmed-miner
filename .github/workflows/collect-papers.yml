@@ -47,6 +47,7 @@ jobs:
     - name: Install uv (disable action cache to avoid restore errors)
       uses: astral-sh/setup-uv@v7
       with:
+        version: "latest"
         enable-cache: false
 
     - name: Install dependencies

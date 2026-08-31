@@ -1,13 +1,11 @@
-# AGENTS.md
+# Project Instructions (for AI Agents)
 
-Guidelines and consolidated history for AI coding agents working on this repository.
+## Language Rule — Always Use ASD-STE100
+- Always write all agent-facing text in ASD-STE100 Simplified Technical English.
+- Use short sentences. Use approved words. Avoid ambiguity.
+- Do not use idioms. Do not use long nouns. Do not use passive voice unless needed.
+- Apply this rule to: comments, commit messages, pull request descriptions, documentation, and chat replies.
 
-This repository has been developed with the help of multiple AI agents:
-
-- **Jules** (Google): security, performance, and accessibility improvements — session learnings consolidated in this file
-- **GitHub Copilot**: implementation of the CSV paper-collection feature (commit `4d8d27c`, "update by copilot")
-
----
 
 ## Jules Learnings
 
