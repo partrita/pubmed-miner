@@ -134,12 +134,18 @@ class CitationService:
                     return count
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 429:
-                    retry_after = e.response.headers.get("Retry-After", "60")
+                    retry_after = e.response.headers.get("Retry-After", "10")
                     try:
-                        sleep_time = int(retry_after)
+                        sleep_time = min(int(retry_after), 10)
                     except (ValueError, TypeError):
-                        sleep_time = 60
+                        sleep_time = 10
                     time.sleep(sleep_time)
+                    if attempt >= 1:
+                        # Fallback immediately when consecutive 429 rate limits occur
+                        self.logger.warning(
+                            f"Consecutive rate limit (429) hit for PMID {pmid}. Falling back immediately."
+                        )
+                        break
                     continue
                 self._error_count += 1
             except Exception as e:

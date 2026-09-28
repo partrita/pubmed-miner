@@ -14,48 +14,48 @@ topics:
   # Machine Learning in Healthcare
   - name: "machine-learning-antibody"
     query: "machine learning AND antibody"
-    max_papers: 100
+    max_papers: 30
     essential_count: 3
     enabled: false
 
   # Cancer Immunotherapy
   - name: "treg-cell"
     query: "treg AND cancer AND immunotherapy"
-    max_papers: 100
+    max_papers: 30
     essential_count: 3
     enabled: false
 
  # Cancer Immunotherapy
   - name: "cancer-immunotherapy"
     query: "cancer AND immunotherapy"
-    max_papers: 100
+    max_papers: 30
     essential_count: 3
     enabled: false
 
   # Artificial Intelligence Drug Discovery
   - name: "ai-drug-discovery"
     query: "artificial intelligence AND drug discovery"
-    max_papers: 100
+    max_papers: 30
     essential_count: 3
     enabled: true  # Disabled example
 
   # De novo protein design
   - name: "de-novo-protein-design"
     query: "de novo design AND artificial intelligence AND protein design"
-    max_papers: 100
+    max_papers: 30
     essential_count: 3
     enabled: true  # Disabled example
 
   # bioinformatics
   - name: "bioinformatics"
     query: "bioinformatics AND machine learning AND deep learning"
-    max_papers: 100
+    max_papers: 30
     essential_count: 3
     enabled: false  # Disabled example
 
   # Cyclic Peptide
   - name: "cyclic-peptide"
     query: "cyclic peptide"
-    max_papers: 100
+    max_papers: 30
     essential_count: 3
     enabled: true

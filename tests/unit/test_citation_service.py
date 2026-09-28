@@ -159,7 +159,7 @@ class TestCitationService:
         """Test Crossref API rate limiting handling."""
         mock_response = Mock()
         mock_response.status_code = 429
-        mock_response.headers = {"Retry-After": "60"}
+        mock_response.headers = {"Retry-After": "10"}
         mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
             "429 Too Many Requests", response=mock_response
         )
@@ -171,7 +171,8 @@ class TestCitationService:
             with patch("time.sleep") as mock_sleep:
                 count = self.service.get_citation_count("12345", doi="10.1038/test")
 
-                mock_sleep.assert_called_with(60)
+                mock_sleep.assert_called_with(10)
+                assert mock_sleep.call_count == 2
                 assert count == 0
 
     def test_doi_validation(self):
