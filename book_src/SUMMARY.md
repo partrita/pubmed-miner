@@ -14,3 +14,4 @@
     - [August 2026](2026/08.md)
     - [September 2026](2026/09.md)
     - [October 2026](2026/10.md)
+    - [November 2026](2026/11.md)
