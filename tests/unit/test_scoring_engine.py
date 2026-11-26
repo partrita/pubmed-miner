@@ -21,7 +21,10 @@ class TestScoringEngine:
             title="Machine Learning in Healthcare: A Comprehensive Review",
             authors=["John Doe", "Jane Smith"],
             journal="Nature Medicine",
-            publication_date=datetime(2023, 1, 15),
+            # Relative date: the recency component of the score decays from
+            # datetime.now(), so a pinned date makes the "recent paper scores
+            # well" assertions expire on their own after a couple of years.
+            publication_date=datetime.now() - timedelta(days=30),
             abstract="This paper reviews the applications of machine learning in healthcare...",
             doi="10.1038/s41591-023-12345",
         )
